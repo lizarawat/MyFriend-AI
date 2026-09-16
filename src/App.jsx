@@ -4,6 +4,7 @@ import ChatHeader from './components/ChatHeader';
 import MessageArea from './components/MessageArea';
 import ChatInput from './components/ChatInput';
 import PersonaInspectorModal from './components/PersonaInspectorModal';
+import DataScienceDashboardModal from './components/DataScienceDashboardModal';
 import ImportModal from './components/ImportModal';
 import ApiKeyModal from './components/ApiKeyModal';
 import GroupChatModal from './components/GroupChatModal';
@@ -12,7 +13,6 @@ import { DEFAULT_PERSONAS } from './data/defaultPersonas';
 import { generatePersonaReply } from './services/personaEngine';
 
 export default function App() {
-  // Local storage initializations
   const [personas, setPersonas] = useState(() => {
     const saved = localStorage.getItem('persona_echo_personas');
     return saved ? JSON.parse(saved) : DEFAULT_PERSONAS;
@@ -26,7 +26,6 @@ export default function App() {
     const saved = localStorage.getItem('persona_echo_histories');
     if (saved) return JSON.parse(saved);
     
-    // Default initial message histories per default persona
     return {
       'alex-sarcastic': [
         { sender: 'bot', text: 'yo what\'s up? deadass chilling 💀', timestamp: '10:15 AM' }
@@ -47,12 +46,12 @@ export default function App() {
   // Modal Visibility States
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
+  const [isDataScienceOpen, setIsDataScienceOpen] = useState(false);
   const [isApiKeyOpen, setIsApiKeyOpen] = useState(false);
   const [isGroupChatOpen, setIsGroupChatOpen] = useState(false);
 
   const [isTyping, setIsTyping] = useState(false);
 
-  // Persistence Effects
   useEffect(() => {
     localStorage.setItem('persona_echo_personas', JSON.stringify(personas));
   }, [personas]);
@@ -68,7 +67,6 @@ export default function App() {
   const activePersona = personas.find(p => p.id === activePersonaId) || personas[0];
   const activeMessages = chatHistories[activePersonaId] || [];
 
-  // Compute Last Messages map for Sidebar
   const lastMessages = {};
   personas.forEach(p => {
     const hist = chatHistories[p.id];
@@ -79,14 +77,12 @@ export default function App() {
     }
   });
 
-  // Handle Sending a Message
   const handleSendMessage = async (userText) => {
     if (!activePersona) return;
 
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const userMsg = { sender: 'user', text: userText, timestamp: timeStr };
 
-    // Update history with User message
     const updatedHistory = [...activeMessages, userMsg];
     setChatHistories(prev => ({
       ...prev,
@@ -95,11 +91,9 @@ export default function App() {
 
     setIsTyping(true);
 
-    // Simulate natural typing delay based on persona words per message
-    const delayMs = Math.min(2200, Math.max(800, (activePersona.avgWordsPerMsg || 8) * 120));
+    const delayMs = Math.min(2000, Math.max(700, (activePersona.avgWordsPerMsg || 8) * 110));
     await new Promise(r => setTimeout(r, delayMs));
 
-    // Generate persona reply
     const replyText = await generatePersonaReply({
       persona: activePersona,
       conversationHistory: updatedHistory,
@@ -117,26 +111,23 @@ export default function App() {
     setIsTyping(false);
   };
 
-  // Add new persona from Chat Uploader
   const handleAddPersona = (newPersona) => {
     setPersonas(prev => [newPersona, ...prev]);
     setActivePersonaId(newPersona.id);
     setChatHistories(prev => ({
       ...prev,
       [newPersona.id]: [
-        { sender: 'bot', text: `Hey! I am ${newPersona.name}. I've analyzed our chats and I'm ready to talk!`, timestamp: 'Just now' }
+        { sender: 'bot', text: `Hey! I am ${newPersona.name}. My TF-IDF vector & Markov models are trained and ready!`, timestamp: 'Just now' }
       ]
     }));
   };
 
-  // Save updated persona tuning from Inspector
   const handleSavePersona = (updatedPersona) => {
     setPersonas(prev => prev.map(p => p.id === updatedPersona.id ? updatedPersona : p));
   };
 
   return (
     <div className="app-container">
-      {/* Sidebar (WhatsApp-style contact list) */}
       <Sidebar 
         personas={personas}
         activePersonaId={activePersonaId}
@@ -147,13 +138,13 @@ export default function App() {
         lastMessages={lastMessages}
       />
 
-      {/* Active Chat Area */}
       <main className="chat-main">
         {activePersona ? (
           <>
             <ChatHeader 
               persona={activePersona} 
               onOpenInspector={() => setIsInspectorOpen(true)}
+              onOpenDataScience={() => setIsDataScienceOpen(true)}
               apiKey={apiKey}
             />
             <MessageArea 
@@ -187,6 +178,13 @@ export default function App() {
           persona={activePersona} 
           onSavePersona={handleSavePersona} 
           onClose={() => setIsInspectorOpen(false)} 
+        />
+      )}
+
+      {isDataScienceOpen && activePersona && (
+        <DataScienceDashboardModal 
+          persona={activePersona} 
+          onClose={() => setIsDataScienceOpen(false)} 
         />
       )}
 

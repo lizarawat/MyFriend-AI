@@ -1,6 +1,8 @@
+import { TFIDFVectorizer, MarkovChainLM } from './dataScienceNLP';
+
 /**
  * MyFriend AI - Persona Profiling & Style Analyzer
- * Extracts conversation turn pairs, language signature (Hinglish/English), top emojis, slang, and prompt profile.
+ * Extracts conversation turn pairs, language signature, TF-IDF weights, Markov Chain LM, and prompt profile.
  */
 
 const ENGLISH_STOP_WORDS = new Set([
@@ -28,7 +30,7 @@ export function analyzePersona(parsedData, targetPersonName) {
     return { error: `No messages found for speaker "${targetPersonName}"` };
   }
 
-  // 1. Extract Conversation Pairs (User -> Friend response pairs)
+  // 1. Extract Conversation Turn Pairs
   const chatPairs = [];
   for (let i = 0; i < allMessages.length - 1; i++) {
     const current = allMessages[i];
@@ -43,7 +45,7 @@ export function analyzePersona(parsedData, targetPersonName) {
     }
   }
 
-  // 2. Language Detection (Hinglish vs English)
+  // 2. Language Detection
   let hinglishCount = 0;
   const texts = friendMessages.map(m => m.text);
 
@@ -54,8 +56,16 @@ export function analyzePersona(parsedData, targetPersonName) {
     });
   });
 
-  const isHinglish = hinglishCount > friendMessages.length * 0.15;
+  const isHinglish = hinglishCount > friendMessages.length * 0.12;
   const detectedLanguage = isHinglish ? 'Hinglish (Romanized Hindi + English)' : 'English';
+
+  // 3. TF-IDF Feature Extraction
+  const tfidfVectorizer = new TFIDFVectorizer();
+  const tfidfKeywords = tfidfVectorizer.getTopKeywords(texts, 15);
+
+  // 4. Markov Chain Model Training
+  const markovLM = new MarkovChainLM(2);
+  markovLM.train(texts);
 
   let totalWords = 0;
   let allCapsCount = 0;
@@ -75,12 +85,10 @@ export function analyzePersona(parsedData, targetPersonName) {
       emojiFreq[e] = (emojiFreq[e] || 0) + 1;
     });
 
-    // Casing & Punctuation
     if (text === text.toUpperCase() && /[A-Z]/.test(text)) allCapsCount++;
     if (text === text.toLowerCase() && /[a-z]/.test(text)) allLowerCount++;
     if (text.includes('!')) exclamationCount++;
 
-    // Words
     const words = text.toLowerCase().replace(/[^\w\s']/g, '').split(/\s+/).filter(Boolean);
     totalWords += words.length;
 
@@ -90,7 +98,6 @@ export function analyzePersona(parsedData, targetPersonName) {
       }
     });
 
-    // N-grams
     for (let i = 0; i < words.length - 1; i++) {
       const bigram = `${words[i]} ${words[i + 1]}`;
       if (!ENGLISH_STOP_WORDS.has(words[i]) || !ENGLISH_STOP_WORDS.has(words[i + 1])) {
@@ -118,7 +125,6 @@ export function analyzePersona(parsedData, targetPersonName) {
     .slice(0, 8)
     .map(([phrase]) => phrase);
 
-  // Compute Personality Traits
   const totalEmojiCount = Object.values(emojiFreq).reduce((a, b) => a + b, 0);
   const emojiDensity = totalWords > 0 ? (totalEmojiCount / totalWords) * 100 : 0;
 
@@ -131,28 +137,24 @@ export function analyzePersona(parsedData, targetPersonName) {
   if (sarcasmIndex > 75) archetype = 'Witty & Sarcastic Chatter';
   else if (energyIndex > 75) archetype = 'High-Energy Hype Friend';
 
-  // System Prompt for Gemini LLM
   const fewShotExamples = chatPairs.slice(0, 20).map(p => `User: "${p.prompt}"\n${targetPersonName}: "${p.response}"`).join('\n\n');
 
   const systemPrompt = `You are a virtual AI persona modeled strictly after "${targetPersonName}".
 
-LANGUAGE & VOICE MATRIX:
+DATA SCIENCE & LANGUAGE MATRIX:
 - Primary Language: ${detectedLanguage}
 - Archetype: ${archetype}
-- Average Sentence Length: ${avgWordsPerMsg} words
-- Favorite Words: ${topWords.slice(0, 8).map(w => w.word).join(', ')}
+- TF-IDF Top Words: ${tfidfKeywords.slice(0, 8).map(k => k.word).join(', ')}
 - Top Emojis: ${topEmojis.slice(0, 5).map(e => e.emoji).join(' ')}
 
 CRITICAL LANGUAGE RULES:
-1. You MUST write in ${detectedLanguage}. If the primary language is Hinglish, speak ONLY in Hinglish using words like "${topWords.slice(0, 5).map(w => w.word).join('", "')}". NEVER answer in formal standard English if the person speaks Hinglish!
+1. You MUST write in ${detectedLanguage}. If Hinglish, write ONLY in casual Hinglish using words like "${tfidfKeywords.slice(0, 5).map(w => w.word).join('", "')}". NEVER reply in formal English if the persona speaks Hinglish!
 2. Match ${targetPersonName}'s exact spelling, capitalization, and brevity.
-3. ${allLowerCount > messageCount * 0.5 ? 'Write predominantly in lowercase or casual typing.' : 'Use standard capitalization.'}
-4. Stay in character at all times.
+3. Stay in character at all times.
 
-FEW-SHOT REAL EXAMPLES OF ${targetPersonName.toUpperCase()}'S CHATS:
+REAL CONVERSATION EXAMPLES OF ${targetPersonName.toUpperCase()}:
 ${fewShotExamples || 'No pair samples available'}`;
 
-  // Unique non-empty sample messages
   const allSampleMessages = Array.from(new Set(texts.filter(t => t && t.trim().length > 0)));
 
   return {
@@ -174,6 +176,9 @@ ${fewShotExamples || 'No pair samples available'}`;
     topWords,
     topEmojis,
     topCatchphrases,
+    tfidfKeywords,
+    markovTransitions: markovLM.transitions,
+    markovStarts: markovLM.startTokens,
     allSampleMessages,
     chatPairs,
     sampleMessages: allSampleMessages.slice(-20),
