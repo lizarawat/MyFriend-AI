@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { X, Upload, FileText, Sparkles, Check, AlertCircle } from 'lucide-react';
-import { parseChatLog } from '../services/chatParser';
+import { X, Upload, Folder, FileArchive, Sparkles, Check, AlertCircle } from 'lucide-react';
+import { parseChatLog, parseZipArchive, parseFolderFileList } from '../services/chatParser';
 import { analyzePersona } from '../services/personaAnalyzer';
 
 export default function ImportModal({ onAddPersona, onClose }) {
@@ -10,28 +10,104 @@ export default function ImportModal({ onAddPersona, onClose }) {
   const [selectedSpeaker, setSelectedSpeaker] = useState('');
   const [customAvatar, setCustomAvatar] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  const handleFileUpload = (e) => {
+  const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target.result;
-      processTextContent(content);
-    };
-    reader.readAsText(file);
+    setIsProcessing(true);
+    setErrorMsg('');
+
+    try {
+      if (file.name.toLowerCase().endsWith('.zip')) {
+        // Zip archive processing
+        const res = await parseZipArchive(file);
+        handleAnalysisResult(res);
+      } else {
+        // Text / JSON processing
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const content = event.target.result;
+          processTextContent(content);
+        };
+        reader.readAsText(file);
+      }
+    } catch (err) {
+      setErrorMsg('Failed to process file: ' + err.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleFolderUpload = async (e) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsProcessing(true);
+    setErrorMsg('');
+
+    try {
+      const res = await parseFolderFileList(files);
+      handleAnalysisResult(res);
+    } catch (err) {
+      setErrorMsg('Failed to process folder: ' + err.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const items = e.dataTransfer.files;
+    if (!items || items.length === 0) return;
+
+    setIsProcessing(true);
+    setErrorMsg('');
+
+    try {
+      if (items.length === 1 && items[0].name.toLowerCase().endsWith('.zip')) {
+        const res = await parseZipArchive(items[0]);
+        handleAnalysisResult(res);
+      } else if (items.length > 1) {
+        // Folder or multi-file drop
+        const res = await parseFolderFileList(items);
+        handleAnalysisResult(res);
+      } else {
+        const file = items[0];
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          processTextContent(event.target.result);
+        };
+        reader.readAsText(file);
+      }
+    } catch (err) {
+      setErrorMsg('Error reading dropped files: ' + err.message);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const processTextContent = (text) => {
     setErrorMsg('');
     const res = parseChatLog(text);
+    handleAnalysisResult(res);
+  };
+
+  const handleAnalysisResult = (res) => {
     if (res.error) {
       setErrorMsg(res.error);
       setParsedResult(null);
     } else {
       setParsedResult(res);
-      if (res.participants.length > 0) {
+      if (res.participants && res.participants.length > 0) {
         setSelectedSpeaker(res.participants[0]);
       }
     }
@@ -116,7 +192,7 @@ export default function ImportModal({ onAddPersona, onClose }) {
             onClick={() => setActiveTab('upload')}
             style={{ flex: 1, padding: 10, fontSize: '0.85rem' }}
           >
-            Upload Export File
+            Upload File / Folder / ZIP
           </button>
           <button 
             className={`btn-secondary ${activeTab === 'paste' ? 'btn-primary' : ''}`}
@@ -141,16 +217,44 @@ export default function ImportModal({ onAddPersona, onClose }) {
           </div>
         )}
 
-        {/* Tab 1: File Upload */}
+        {/* Tab 1: File / Folder / ZIP Upload */}
         {activeTab === 'upload' && (
-          <div style={{ border: '2px dashed var(--border-glass-highlight)', borderRadius: 16, padding: 30, textAlign: 'center', background: 'rgba(30, 41, 59, 0.3)', marginBottom: 20 }}>
-            <Upload size={36} color="var(--accent-cyan)" style={{ marginBottom: 10 }} />
-            <div style={{ fontWeight: 700, fontSize: '1rem', marginBottom: 6 }}>Drop your chat export file here</div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 16 }}>Supports WhatsApp (`.txt`), Telegram (`.json`), Discord, or raw text transcripts</div>
-            <label className="btn-primary" style={{ display: 'inline-block', cursor: 'pointer' }}>
-              Browse File
-              <input type="file" accept=".txt,.json" onChange={handleFileUpload} style={{ display: 'none' }} />
-            </label>
+          <div 
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            style={{ border: '2px dashed var(--border-glass-highlight)', borderRadius: 16, padding: 30, textAlign: 'center', background: 'rgba(30, 41, 59, 0.3)', marginBottom: 20 }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 14, marginBottom: 10 }}>
+              <Upload size={32} color="var(--accent-cyan)" />
+              <FileArchive size={32} color="var(--accent-purple)" />
+              <Folder size={32} color="var(--accent-emerald)" />
+            </div>
+            
+            <div style={{ fontWeight: 700, fontSize: '1rem', marginBottom: 6 }}>
+              {isProcessing ? 'Processing chat data...' : 'Drop your WhatsApp Export File, ZIP, or Folder here'}
+            </div>
+            
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 16 }}>
+              Supports WhatsApp ZIP Archives, WhatsApp Export Folders (`WhatsApp Chat with Bunty`), `.txt`, `.json`, or raw transcripts.
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <label className="btn-primary" style={{ cursor: 'pointer', fontSize: '0.85rem' }}>
+                📁 Select File or ZIP Archive
+                <input type="file" accept=".txt,.json,.zip" onChange={handleFileUpload} style={{ display: 'none' }} />
+              </label>
+
+              <label className="btn-secondary" style={{ cursor: 'pointer', fontSize: '0.85rem' }}>
+                📂 Select WhatsApp Folder
+                <input 
+                  type="file" 
+                  webkitdirectory="true" 
+                  directory="true" 
+                  onChange={handleFolderUpload} 
+                  style={{ display: 'none' }} 
+                />
+              </label>
+            </div>
           </div>
         )}
 
@@ -160,7 +264,7 @@ export default function ImportModal({ onAddPersona, onClose }) {
             <textarea 
               className="form-textarea" 
               rows="6" 
-              placeholder={`Paste chat export lines here, e.g.:\n15/09/24, 10:15 - Alex: deadass bro? 💀\n15/09/24, 10:16 - You: What are you doing?\n15/09/24, 10:17 - Alex: lmao nothing much`}
+              placeholder={`Paste chat export lines here, e.g.:\n15/09/24, 10:15 - Bunty: deadass bro? 💀\n15/09/24, 10:16 - You: What are you doing?\n15/09/24, 10:17 - Bunty: lmao nothing much`}
               value={rawText}
               onChange={(e) => setRawText(e.target.value)}
             />

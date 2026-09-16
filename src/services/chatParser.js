@@ -1,7 +1,68 @@
+import JSZip from 'jszip';
+
 /**
- * PersonaEcho AI - Multi-Format Chat Parser Engine
- * Extracts participants, timestamps, and message strings from exported chat logs.
+ * PersonaEcho AI / MyFriend AI - Multi-Format Chat Parser Engine
+ * Extracts participants, timestamps, and message strings from text, JSON, ZIP archives, or folder exports.
  */
+
+export async function parseZipArchive(zipFile) {
+  try {
+    const zip = new JSZip();
+    const contents = await zip.loadAsync(zipFile);
+
+    // Look for _chat.txt or any .txt/.json file inside the zip archive
+    let targetFileName = null;
+    let fallbackTxtName = null;
+
+    Object.keys(contents.files).forEach(filename => {
+      if (contents.files[filename].dir) return;
+
+      const lower = filename.toLowerCase();
+      if (lower.endsWith('_chat.txt') || lower.includes('chat') && lower.endsWith('.txt')) {
+        targetFileName = filename;
+      } else if (lower.endsWith('.txt') || lower.endsWith('.json')) {
+        fallbackTxtName = filename;
+      }
+    });
+
+    const fileToExtract = targetFileName || fallbackTxtName;
+
+    if (!fileToExtract) {
+      return { error: 'No chat text file (e.g. _chat.txt or .json) found inside the zip archive.' };
+    }
+
+    const textContent = await contents.files[fileToExtract].async('string');
+    return parseChatLog(textContent);
+  } catch (err) {
+    console.error("Zip Parsing Error:", err);
+    return { error: 'Failed to extract zip file: ' + err.message };
+  }
+}
+
+export async function parseFolderFileList(fileList) {
+  // Array of File objects from folder upload or webkitdirectory
+  const files = Array.from(fileList);
+  
+  // Find _chat.txt or chat .txt file
+  let chatFile = files.find(f => f.name.toLowerCase() === '_chat.txt' || f.name.toLowerCase().includes('chat'));
+  if (!chatFile) {
+    chatFile = files.find(f => f.name.toLowerCase().endsWith('.txt') || f.name.toLowerCase().endsWith('.json'));
+  }
+
+  if (!chatFile) {
+    return { error: 'No chat transcript text file (e.g. _chat.txt) found in the selected folder.' };
+  }
+
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const res = parseChatLog(e.target.result);
+      resolve(res);
+    };
+    reader.onerror = () => resolve({ error: 'Failed to read chat file inside folder.' });
+    reader.readAsText(chatFile);
+  });
+}
 
 export function parseChatLog(rawText, fileType = 'auto') {
   if (!rawText || typeof rawText !== 'string') {
@@ -94,7 +155,6 @@ function parseJSONExport(data) {
   const messages = [];
   const participantsSet = new Set();
 
-  // Telegram JSON structure
   const msgList = data.messages || (Array.isArray(data) ? data : []);
 
   for (const m of msgList) {
@@ -103,7 +163,6 @@ function parseJSONExport(data) {
     let text = m.text;
 
     if (Array.isArray(text)) {
-      // Telegram text entity array
       text = text.map(t => (typeof t === 'string' ? t : t.text || '')).join('');
     }
 
