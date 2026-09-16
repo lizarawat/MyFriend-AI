@@ -1,22 +1,47 @@
 /**
  * MyFriend AI - Persona Reply Generation Engine
- * Features Chat Pair Memory Retrieval, Fuzzy Keyword Matching, Hinglish Support, and Gemini LLM Integration.
+ * Connects to Python Machine Learning Backend (Flask + Scikit-Learn TF-IDF/Char N-Gram) + Gemini LLM fallback.
  */
+
+const PYTHON_ML_BACKEND_URL = 'http://127.0.0.1:5000/api/generate';
 
 export async function generatePersonaReply({ persona, conversationHistory, userMessage, apiKey }) {
   if (!persona) return "Hey, pick a contact first!";
 
-  // 1. If Gemini API Key is provided, use Gemini REST API
+  // 1. Python Scikit-Learn Machine Learning Engine (Highest Priority)
+  try {
+    const pyResponse = await fetch(PYTHON_ML_BACKEND_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        persona_id: persona.id,
+        user_message: userMessage,
+        chat_pairs: persona.chatPairs || []
+      })
+    });
+
+    if (pyResponse.ok) {
+      const pyData = await pyResponse.json();
+      if (pyData.reply && pyData.reply !== '...') {
+        console.log("Python ML Reply Generated (Score:", pyData.max_similarity_score, "):", pyData.reply);
+        return pyData.reply;
+      }
+    }
+  } catch (err) {
+    console.warn("Python ML Backend un-reachable, trying fallback options:", err);
+  }
+
+  // 2. Gemini REST API Call (If API Key set)
   if (apiKey && apiKey.trim() !== '') {
     try {
       const llmReply = await fetchGeminiReply(persona, conversationHistory, userMessage, apiKey);
       if (llmReply) return llmReply;
     } catch (err) {
-      console.warn("Gemini API call failed, falling back to Memory Retrieval Engine:", err);
+      console.warn("Gemini API call failed:", err);
     }
   }
 
-  // 2. Offline Memory Retrieval & Persona Synthesis Engine
+  // 3. Fallback Heuristic Matcher
   return generateHeuristicReply(persona, conversationHistory, userMessage);
 }
 
@@ -67,8 +92,7 @@ async function fetchGeminiReply(persona, conversationHistory, userMessage, apiKe
 }
 
 /**
- * Offline Memory Retrieval Engine
- * Matches input against real conversation turn pairs and actual sample messages.
+ * Fallback Offline Matcher
  */
 function generateHeuristicReply(persona, history, userMsg) {
   const input = userMsg.toLowerCase().trim();
@@ -81,109 +105,28 @@ function generateHeuristicReply(persona, history, userMsg) {
 
   const mainEmoji = topEmojis.length > 0 ? topEmojis[0] : (isHinglish ? '🥲' : '💀');
 
-  // STEP 1: Check Chat Pairs Memory for Similar User Prompt
   if (chatPairs.length > 0) {
-    let bestMatch = null;
-    let maxScore = 0;
-
     for (const pair of chatPairs) {
       const promptLower = pair.prompt.toLowerCase().trim();
-      
-      // Substring match (e.g. "oiee", "kya karra", "tujhe hindi aati")
       if (promptLower === input || promptLower.includes(input) || input.includes(promptLower)) {
-        return applyStyleModifiers(pair.response, persona);
+        return pair.response;
       }
-
-      // Word Jaccard Similarity Match
-      const pairWords = new Set(promptLower.replace(/[^\w\s']/g, '').split(/\s+/).filter(Boolean));
-      let intersection = 0;
-      inputWords.forEach(w => {
-        if (pairWords.has(w)) intersection++;
-      });
-
-      const union = new Set([...inputWords, ...pairWords]).size;
-      const score = union > 0 ? intersection / union : 0;
-
-      if (score > maxScore && score >= 0.3) {
-        maxScore = score;
-        bestMatch = pair.response;
-      }
-    }
-
-    if (bestMatch) {
-      return applyStyleModifiers(bestMatch, persona);
     }
   }
 
-  // STEP 2: Search Bunty's Real Messages for Keyword Relevance
   if (allSampleMessages.length > 0) {
-    const keywordMatches = [];
-
-    for (const msg of allSampleMessages) {
-      const msgLower = msg.toLowerCase();
-      let matchCount = 0;
-
-      inputWords.forEach(w => {
-        if (w.length > 2 && msgLower.includes(w)) {
-          matchCount++;
-        }
-      });
-
-      if (matchCount > 0) {
-        keywordMatches.push(msg);
-      }
+    const matches = allSampleMessages.filter(m => {
+      const lower = m.toLowerCase();
+      return Array.from(inputWords).some(w => w.length > 2 && lower.includes(w));
+    });
+    if (matches.length > 0) {
+      return pickRandom(matches);
     }
 
-    if (keywordMatches.length > 0) {
-      return applyStyleModifiers(pickRandom(keywordMatches), persona);
-    }
+    return pickRandom(allSampleMessages);
   }
 
-  // STEP 3: Fallback to Real Random Message from Persona's Chat History
-  if (allSampleMessages.length > 0 && Math.random() > 0.3) {
-    const randomRealMsg = pickRandom(allSampleMessages);
-    if (randomRealMsg && randomRealMsg.length < 100) {
-      return applyStyleModifiers(randomRealMsg, persona);
-    }
-  }
-
-  // STEP 4: Language-Aware Synthetic Fallback (Hinglish vs English)
-  if (isHinglish) {
-    const hinglishFallbacks = [
-      `haa ${mainEmoji}`,
-      `bol bhai kya hua`,
-      `kuch nhi yrr, tu bata`,
-      `sahi h ${mainEmoji}`,
-      `hn`
-    ];
-    return applyStyleModifiers(pickRandom(hinglishFallbacks), persona);
-  } else {
-    const englishFallbacks = [
-      `yeah for real ${mainEmoji}`,
-      `haha valid point ngl`,
-      `wait really? tell me more`,
-      `idk man let's see ${mainEmoji}`
-    ];
-    return applyStyleModifiers(pickRandom(englishFallbacks), persona);
-  }
-}
-
-function applyStyleModifiers(text, persona) {
-  let result = text;
-  const casing = persona.casing || {};
-
-  // Preserve persona's exact capitalization
-  if (parseFloat(casing.allLowerRatio) > 0.7) {
-    result = result.toLowerCase();
-  }
-
-  // Inject persona emoji occasionally if not present
-  const topEmojis = (persona.topEmojis || []).map(e => e.emoji);
-  if (topEmojis.length > 0 && !topEmojis.some(e => result.includes(e)) && Math.random() > 0.5) {
-    result += ` ${topEmojis[0]}`;
-  }
-
-  return result;
+  return isHinglish ? `haa ${mainEmoji}` : `yeah for real ${mainEmoji}`;
 }
 
 function pickRandom(arr) {
