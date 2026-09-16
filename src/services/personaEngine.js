@@ -1,6 +1,6 @@
 /**
- * PersonaEcho AI - Persona Reply Generation Engine
- * Handles dual-mode reply generation (Offline Heuristic Synthesis & Online Gemini LLM API).
+ * MyFriend AI - Persona Reply Generation Engine
+ * Features Chat Pair Memory Retrieval, Fuzzy Keyword Matching, Hinglish Support, and Gemini LLM Integration.
  */
 
 export async function generatePersonaReply({ persona, conversationHistory, userMessage, apiKey }) {
@@ -12,11 +12,11 @@ export async function generatePersonaReply({ persona, conversationHistory, userM
       const llmReply = await fetchGeminiReply(persona, conversationHistory, userMessage, apiKey);
       if (llmReply) return llmReply;
     } catch (err) {
-      console.warn("Gemini API call failed, falling back to Heuristic Engine:", err);
+      console.warn("Gemini API call failed, falling back to Memory Retrieval Engine:", err);
     }
   }
 
-  // 2. Fallback to Offline Heuristic Engine (Zero API Key needed)
+  // 2. Offline Memory Retrieval & Persona Synthesis Engine
   return generateHeuristicReply(persona, conversationHistory, userMessage);
 }
 
@@ -26,10 +26,7 @@ export async function generatePersonaReply({ persona, conversationHistory, userM
 async function fetchGeminiReply(persona, conversationHistory, userMessage, apiKey) {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey.trim()}`;
 
-  // Format history for Gemini
   const contents = [];
-
-  // Add conversation history
   const recentHistory = (conversationHistory || []).slice(-8);
   recentHistory.forEach(msg => {
     contents.push({
@@ -38,7 +35,6 @@ async function fetchGeminiReply(persona, conversationHistory, userMessage, apiKe
     });
   });
 
-  // Add current user prompt
   contents.push({
     role: 'user',
     parts: [{ text: userMessage }]
@@ -51,7 +47,7 @@ async function fetchGeminiReply(persona, conversationHistory, userMessage, apiKe
     contents,
     generationConfig: {
       temperature: 0.8,
-      maxOutputTokens: 250,
+      maxOutputTokens: 200,
     }
   };
 
@@ -62,7 +58,7 @@ async function fetchGeminiReply(persona, conversationHistory, userMessage, apiKe
   });
 
   if (!res.ok) {
-    throw new Error(`Gemini API returned status ${res.status}`);
+    throw new Error(`Gemini API status ${res.status}`);
   }
 
   const data = await res.json();
@@ -71,106 +67,119 @@ async function fetchGeminiReply(persona, conversationHistory, userMessage, apiKe
 }
 
 /**
- * Offline Heuristic Reply Generator
- * Synthesizes replies matching persona slang, emojis, sample sentences, and trait modifiers.
+ * Offline Memory Retrieval Engine
+ * Matches input against real conversation turn pairs and actual sample messages.
  */
 function generateHeuristicReply(persona, history, userMsg) {
-  const text = userMsg.toLowerCase().trim();
-  const traits = persona.traits || { sarcasm: 50, energy: 50, formality: 50 };
+  const input = userMsg.toLowerCase().trim();
+  const inputWords = new Set(input.replace(/[^\w\s']/g, '').split(/\s+/).filter(Boolean));
+
+  const chatPairs = persona.chatPairs || [];
+  const allSampleMessages = persona.allSampleMessages || persona.sampleMessages || [];
   const topEmojis = (persona.topEmojis || []).map(e => e.emoji);
-  const sampleMsgs = persona.sampleMessages || [];
-  const topWords = (persona.topWords || []).map(w => w.word);
-  const catchphrases = persona.topCatchphrases || [];
+  const isHinglish = persona.detectedLanguage?.toLowerCase().includes('hinglish');
 
-  const mainEmoji = topEmojis.length > 0 ? topEmojis[0] : (traits.sarcasm > 60 ? '💀' : '🔥');
-  const secEmoji = topEmojis.length > 1 ? topEmojis[1] : '😂';
+  const mainEmoji = topEmojis.length > 0 ? topEmojis[0] : (isHinglish ? '🥲' : '💀');
 
-  // Greeting check
-  if (/^(hi|hello|hey|yo|sup|wassup|good morning|heyy)/i.test(text)) {
-    const greetings = [
-      `yo! what's up? ${mainEmoji}`,
-      `hey bro, wassup! ${secEmoji}`,
-      `yo yo, how's it going?`,
-      `hey! what are you up to today? ${mainEmoji}`
-    ];
-    return applyStyleModifiers(pickRandom(greetings), persona);
-  }
+  // STEP 1: Check Chat Pairs Memory for Similar User Prompt
+  if (chatPairs.length > 0) {
+    let bestMatch = null;
+    let maxScore = 0;
 
-  // Question check ("what are you doing", "where are you", "how are you")
-  if (text.includes('?') || /^(what|where|how|why|who|when)/i.test(text)) {
-    const questionReplies = [
-      `ngl just chilling right now ${mainEmoji} what about you?`,
-      `working on some stuff, why what's up? ${secEmoji}`,
-      `haha honest truth? not much ${mainEmoji}`,
-      `idk man, depends on the vibe today ${mainEmoji}`
-    ];
-    if (catchphrases.length > 0) {
-      questionReplies.push(`${catchphrases[0]}... honestly just relaxing ${secEmoji}`);
+    for (const pair of chatPairs) {
+      const promptLower = pair.prompt.toLowerCase().trim();
+      
+      // Substring match (e.g. "oiee", "kya karra", "tujhe hindi aati")
+      if (promptLower === input || promptLower.includes(input) || input.includes(promptLower)) {
+        return applyStyleModifiers(pair.response, persona);
+      }
+
+      // Word Jaccard Similarity Match
+      const pairWords = new Set(promptLower.replace(/[^\w\s']/g, '').split(/\s+/).filter(Boolean));
+      let intersection = 0;
+      inputWords.forEach(w => {
+        if (pairWords.has(w)) intersection++;
+      });
+
+      const union = new Set([...inputWords, ...pairWords]).size;
+      const score = union > 0 ? intersection / union : 0;
+
+      if (score > maxScore && score >= 0.3) {
+        maxScore = score;
+        bestMatch = pair.response;
+      }
     }
-    return applyStyleModifiers(pickRandom(questionReplies), persona);
-  }
 
-  // Laughter / Joke / Reaction check
-  if (/(lol|lmao|haha|funny|rofl|joke|dead)/i.test(text)) {
-    const reactions = [
-      `lmao no way 💀💀`,
-      `hahaha deadass ${mainEmoji}`,
-      `bro you're ridiculous ${secEmoji}`,
-      `haha fr fr ${mainEmoji}`
-    ];
-    return applyStyleModifiers(pickRandom(reactions), persona);
-  }
-
-  // Agreement / Opinion request
-  if (/(think|agree|opinion|good|bad|cool|nice)/i.test(text)) {
-    const opinions = [
-      `100% agree with you on that ${mainEmoji}`,
-      `tbh I've been thinking the exact same thing!`,
-      traits.sarcasm > 65 ? `sureee, if you say so 💀` : `sounds pretty cool ngl ${mainEmoji}`,
-      `idk could be better but it's alright ${secEmoji}`
-    ];
-    return applyStyleModifiers(pickRandom(opinions), persona);
-  }
-
-  // Match sample messages if available
-  if (sampleMsgs.length > 0 && Math.random() > 0.4) {
-    const sample = pickRandom(sampleMsgs);
-    if (sample.length < 80) {
-      return applyStyleModifiers(sample, persona);
+    if (bestMatch) {
+      return applyStyleModifiers(bestMatch, persona);
     }
   }
 
-  // General fallback synthetic response
-  const generalResponses = [
-    `yeah for real ${mainEmoji}`,
-    `haha valid point ngl`,
-    `wait really? tell me more ${secEmoji}`,
-    `bruh that's crazy 💀`,
-    `idk man let's see how it goes ${mainEmoji}`
-  ];
+  // STEP 2: Search Bunty's Real Messages for Keyword Relevance
+  if (allSampleMessages.length > 0) {
+    const keywordMatches = [];
 
-  return applyStyleModifiers(pickRandom(generalResponses), persona);
+    for (const msg of allSampleMessages) {
+      const msgLower = msg.toLowerCase();
+      let matchCount = 0;
+
+      inputWords.forEach(w => {
+        if (w.length > 2 && msgLower.includes(w)) {
+          matchCount++;
+        }
+      });
+
+      if (matchCount > 0) {
+        keywordMatches.push(msg);
+      }
+    }
+
+    if (keywordMatches.length > 0) {
+      return applyStyleModifiers(pickRandom(keywordMatches), persona);
+    }
+  }
+
+  // STEP 3: Fallback to Real Random Message from Persona's Chat History
+  if (allSampleMessages.length > 0 && Math.random() > 0.3) {
+    const randomRealMsg = pickRandom(allSampleMessages);
+    if (randomRealMsg && randomRealMsg.length < 100) {
+      return applyStyleModifiers(randomRealMsg, persona);
+    }
+  }
+
+  // STEP 4: Language-Aware Synthetic Fallback (Hinglish vs English)
+  if (isHinglish) {
+    const hinglishFallbacks = [
+      `haa ${mainEmoji}`,
+      `bol bhai kya hua`,
+      `kuch nhi yrr, tu bata`,
+      `sahi h ${mainEmoji}`,
+      `hn`
+    ];
+    return applyStyleModifiers(pickRandom(hinglishFallbacks), persona);
+  } else {
+    const englishFallbacks = [
+      `yeah for real ${mainEmoji}`,
+      `haha valid point ngl`,
+      `wait really? tell me more`,
+      `idk man let's see ${mainEmoji}`
+    ];
+    return applyStyleModifiers(pickRandom(englishFallbacks), persona);
+  }
 }
 
 function applyStyleModifiers(text, persona) {
   let result = text;
-
-  const traits = persona.traits || {};
   const casing = persona.casing || {};
 
-  // All lower case modifier if persona prefers lowercase
-  if (parseFloat(casing.allLowerRatio) > 0.6) {
+  // Preserve persona's exact capitalization
+  if (parseFloat(casing.allLowerRatio) > 0.7) {
     result = result.toLowerCase();
   }
 
-  // Energy modifier (ALL CAPS or Exclamations)
-  if (traits.energy > 80 && Math.random() > 0.5) {
-    result = result.toUpperCase() + "!!";
-  }
-
-  // Emoji injection
+  // Inject persona emoji occasionally if not present
   const topEmojis = (persona.topEmojis || []).map(e => e.emoji);
-  if (topEmojis.length > 0 && !result.includes(topEmojis[0]) && Math.random() > 0.3) {
+  if (topEmojis.length > 0 && !topEmojis.some(e => result.includes(e)) && Math.random() > 0.5) {
     result += ` ${topEmojis[0]}`;
   }
 
