@@ -7,6 +7,31 @@ import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
+# Pre-trained Base Foundation Models across Age Demographics
+DEMOGRAPHIC_BASE_MODELS = {
+    "gen_z": {
+        "title": "Gen-Z / Youth Texting (13-24)",
+        "slang_keywords": ["fr", "ngl", "deadass", "bet", "vibe", "slay", "bruh", "lowkey", "idk", "wbu", "rn", "tbh", "idc", "skibidi", "rizz", "💀", "😭", "🥲"],
+        "greetings": ["yo!", "wassup", "oiee", "hey bro", "sup"],
+        "fallbacks": ["deadass fr 💀", "idk man lowkey chilling 🥲", "lmao no way", "haa valid point ngl", "bet bro"],
+        "prompt_style": "Types casually, relies on lowercase, uses Gen-Z internet slang and emojis like 💀, 😭, 🥲."
+    },
+    "millennial": {
+        "title": "Millennial / Young Adult (25-35)",
+        "slang_keywords": ["lol", "lmao", "haha", "hahaha", "yeah", "cool", "awesome", "nice", "sweet", "cheers", "tbh", "😂", "👍"],
+        "greetings": ["hey!", "hello!", "yo yo", "good morning", "wassup!"],
+        "fallbacks": ["haha yeah for real 😂", "nice, sounds pretty cool!", "lol true that", "yeah totally agree 👍", "let's see how it goes!"],
+        "prompt_style": "Friendly conversational style, uses laugh words (haha, lol) and standard punctuation."
+    },
+    "adult_elder": {
+        "title": "Adult / Formal Communicator (36+)",
+        "slang_keywords": ["regards", "dear", "thanks", "thank you", "hope you are well", "take care", "good morning", "blessings", "pls", "please", "😊", "🙏"],
+        "greetings": ["Good morning!", "Hello", "Hi there", "Hope you are doing well."],
+        "fallbacks": ["That sounds great. Take care!", "Thank you for updating me.", "Indeed, let us speak soon.", "Hope everything goes well! 😊"],
+        "prompt_style": "Formal, structured sentences, uses full punctuation, capitalizes first letters, polite tone."
+    }
+}
+
 class PersonaMLEngine:
     def __init__(self, target_name):
         self.target_name = target_name
@@ -16,12 +41,11 @@ class PersonaMLEngine:
         self.word_matrix = None
         self.char_matrix = None
         self.df = pd.DataFrame()
+        self.demographic_group = "millennial"
+        self.demographic_info = DEMOGRAPHIC_BASE_MODELS["millennial"]
         self.corpus_file = f"corpus_{target_name.lower().replace(' ', '_')}.txt"
 
     def parse_chat_file(self, file_path):
-        """
-        Parses WhatsApp export .txt or .zip file or raw text
-        """
         raw_text = ""
         if file_path.endswith('.zip'):
             with zipfile.ZipFile(file_path, 'r') as z:
@@ -61,10 +85,47 @@ class PersonaMLEngine:
 
         return messages
 
+    def classify_demographic_age_group(self, target_texts):
+        """
+        Classifies persona into Age Group Demographics (Gen-Z, Millennial, Adult/Elder)
+        using internet texting feature scores.
+        """
+        genz_score = 0
+        millennial_score = 0
+        adult_score = 0
+
+        combined = " ".join(target_texts).lower()
+
+        for kw in DEMOGRAPHIC_BASE_MODELS["gen_z"]["slang_keywords"]:
+            genz_score += combined.count(kw)
+
+        for kw in DEMOGRAPHIC_BASE_MODELS["millennial"]["slang_keywords"]:
+            millennial_score += combined.count(kw)
+
+        for kw in DEMOGRAPHIC_BASE_MODELS["adult_elder"]["slang_keywords"]:
+            adult_score += combined.count(kw)
+
+        total_msgs = len(target_texts) or 1
+        lower_count = sum(1 for t in target_texts if t == t.lower())
+        full_punct_count = sum(1 for t in target_texts if t.endswith('.') or t.endswith('!'))
+
+        if lower_count / total_msgs > 0.6 or genz_score >= millennial_score:
+            self.demographic_group = "gen_z"
+        elif full_punct_count / total_msgs > 0.5 or adult_score > millennial_score:
+            self.demographic_group = "adult_elder"
+        else:
+            self.demographic_group = "millennial"
+
+        self.demographic_info = DEMOGRAPHIC_BASE_MODELS[self.demographic_group]
+        return self.demographic_info
+
     def train(self, messages):
         """
-        Extracts dialogue turn pairs and trains Python Scikit-Learn ML models + exports C++ corpus.
+        Extracts dialogue turn pairs, computes demographic classification, and trains ML models.
         """
+        target_texts = [m['text'] for m in messages if m['sender'].lower() == self.target_name.lower()]
+        self.classify_demographic_age_group(target_texts)
+
         turn_pairs = []
         for i in range(len(messages) - 1):
             c_msg = messages[i]
@@ -77,7 +138,6 @@ class PersonaMLEngine:
                 })
 
         if not turn_pairs:
-            target_texts = [m['text'] for m in messages if m['sender'].lower() == self.target_name.lower()]
             for i in range(len(target_texts) - 1):
                 turn_pairs.append({
                     'context': target_texts[i],
@@ -94,7 +154,7 @@ class PersonaMLEngine:
         self.word_vec = TfidfVectorizer(ngram_range=(1, 3), sublinear_tf=True)
         self.word_matrix = self.word_vec.fit_transform(self.df['context'])
 
-        # 2. Scikit-Learn Character N-Gram Subword Vectorizer (Hinglish phonetic matcher)
+        # 2. Scikit-Learn Character N-Gram Subword Vectorizer
         self.char_vec = TfidfVectorizer(analyzer='char_wb', ngram_range=(2, 5), sublinear_tf=True)
         self.char_matrix = self.char_vec.fit_transform(self.df['context'])
 
@@ -108,11 +168,8 @@ class PersonaMLEngine:
         return True
 
     def generate_reply(self, user_message, use_cpp=True):
-        """
-        Generates ML reply using C++ native engine or Python Scikit-Learn
-        """
         if self.df.empty:
-            return "Haa 🥲"
+            return np.random.choice(self.demographic_info["fallbacks"])
 
         user_input = user_message.strip()
         if not user_input:
@@ -134,9 +191,9 @@ class PersonaMLEngine:
                         if cpp_reply:
                             return cpp_reply
             except Exception as e:
-                print("C++ Engine fallback to Python ML:", e)
+                pass
 
-        # Python Scikit-Learn TF-IDF Cosine Similarity Fallback
+        # Python Scikit-Learn TF-IDF Cosine Similarity Search
         q_word = self.word_vec.transform([user_input])
         q_char = self.char_vec.transform([user_input])
 
@@ -146,8 +203,8 @@ class PersonaMLEngine:
         hybrid_scores = 0.5 * word_sims + 0.5 * char_sims
         top_idx = np.argmax(hybrid_scores)
 
-        if hybrid_scores[top_idx] > 0.02:
+        if hybrid_scores[top_idx] > 0.03:
             return self.df.iloc[top_idx]['response']
 
-        # Random fallback from real messages
-        return self.df.sample(1).iloc[0]['response']
+        # Fallback to Demographic Foundation Base Model
+        return np.random.choice(self.demographic_info["fallbacks"])

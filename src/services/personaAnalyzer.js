@@ -2,7 +2,8 @@ import { TFIDFVectorizer, MarkovChainLM } from './dataScienceNLP';
 
 /**
  * MyFriend AI - Persona Profiling & Style Analyzer
- * Extracts conversation turn pairs, language signature, TF-IDF weights, Markov Chain LM, and prompt profile.
+ * Features Demographic Age Group Classification (Gen-Z, Millennial, Adult/Elder),
+ * TF-IDF feature extraction, conversation pair memory, and prompt matrix generation.
  */
 
 const ENGLISH_STOP_WORDS = new Set([
@@ -21,6 +22,13 @@ const HINGLISH_KEYWORDS = [
   'kaise', 'sahi', 'bol', 'arrey', 'sunn', 'oiee', 'oye', 'mujhe', 'tujhe', 'teri', 'mera', 'meri',
   'achha', 'kuch', 'bata', 'rha', 'thi', 'tha', 'vale', 'karo', 'mat', 'abb', 'abey', 'chhod', 'chal'
 ];
+
+// Demographic Age Group Slang Lexicons
+const DEMOGRAPHIC_LEXICONS = {
+  gen_z: ['fr', 'ngl', 'deadass', 'bet', 'vibe', 'slay', 'bruh', 'lowkey', 'idk', 'wbu', 'rn', 'tbh', 'idc', 'skibidi', 'rizz', '💀', '😭', '🥲'],
+  millennial: ['lol', 'lmao', 'haha', 'hahaha', 'yeah', 'cool', 'awesome', 'nice', 'sweet', 'cheers', 'tbh', '😂', '👍'],
+  adult_elder: ['regards', 'dear', 'thanks', 'thank you', 'hope you are well', 'take care', 'good morning', 'blessings', 'pls', 'please', '😊', '🙏']
+};
 
 export function analyzePersona(parsedData, targetPersonName) {
   const allMessages = parsedData.messages || [];
@@ -45,18 +53,43 @@ export function analyzePersona(parsedData, targetPersonName) {
     }
   }
 
-  // 2. Language Detection
+  // 2. Language & Age Group Demographic Classification
   let hinglishCount = 0;
-  const texts = friendMessages.map(m => m.text);
+  let genzCount = 0;
+  let millennialCount = 0;
+  let adultCount = 0;
 
-  texts.forEach(t => {
-    const lower = t.toLowerCase();
-    HINGLISH_KEYWORDS.forEach(kw => {
-      if (lower.includes(kw)) hinglishCount++;
-    });
+  const texts = friendMessages.map(m => m.text);
+  const combinedText = texts.join(' ').toLowerCase();
+
+  HINGLISH_KEYWORDS.forEach(kw => {
+    if (combinedText.includes(kw)) hinglishCount++;
   });
 
-  const isHinglish = hinglishCount > friendMessages.length * 0.12;
+  DEMOGRAPHIC_LEXICONS.gen_z.forEach(kw => {
+    if (combinedText.includes(kw)) genzCount++;
+  });
+
+  DEMOGRAPHIC_LEXICONS.millennial.forEach(kw => {
+    if (combinedText.includes(kw)) millennialCount++;
+  });
+
+  DEMOGRAPHIC_LEXICONS.adult_elder.forEach(kw => {
+    if (combinedText.includes(kw)) adultCount++;
+  });
+
+  const totalMsgs = friendMessages.length || 1;
+  const lowerCount = texts.filter(t => t === t.toLowerCase()).length;
+  const fullPunctCount = texts.filter(t => t.endsWith('.') || t.endsWith('!')).length;
+
+  let ageGroup = 'Millennial / Young Adult (25-35)';
+  if (lowerCount / totalMsgs > 0.6 || genzCount >= millennialCount) {
+    ageGroup = 'Gen-Z / Youth Texting (13-24)';
+  } else if (fullPunctCount / totalMsgs > 0.5 || adultCount > millennialCount) {
+    ageGroup = 'Adult / Formal Communicator (36+)';
+  }
+
+  const isHinglish = hinglishCount > totalMsgs * 0.12;
   const detectedLanguage = isHinglish ? 'Hinglish (Romanized Hindi + English)' : 'English';
 
   // 3. TF-IDF Feature Extraction
@@ -79,7 +112,6 @@ export function analyzePersona(parsedData, targetPersonName) {
   const emojiRegex = /(\p{Extended_Pictographic}|\p{Emoji_Presentation})/gu;
 
   texts.forEach(text => {
-    // Emojis
     const emojis = text.match(emojiRegex) || [];
     emojis.forEach(e => {
       emojiFreq[e] = (emojiFreq[e] || 0) + 1;
@@ -141,14 +173,15 @@ export function analyzePersona(parsedData, targetPersonName) {
 
   const systemPrompt = `You are a virtual AI persona modeled strictly after "${targetPersonName}".
 
-DATA SCIENCE & LANGUAGE MATRIX:
+BASE FOUNDATION & DEMOGRAPHICS MATRIX:
+- Demographics Foundation Classification: ${ageGroup}
 - Primary Language: ${detectedLanguage}
 - Archetype: ${archetype}
 - TF-IDF Top Words: ${tfidfKeywords.slice(0, 8).map(k => k.word).join(', ')}
 - Top Emojis: ${topEmojis.slice(0, 5).map(e => e.emoji).join(' ')}
 
 CRITICAL LANGUAGE RULES:
-1. You MUST write in ${detectedLanguage}. If Hinglish, write ONLY in casual Hinglish using words like "${tfidfKeywords.slice(0, 5).map(w => w.word).join('", "')}". NEVER reply in formal English if the persona speaks Hinglish!
+1. Speak strictly using the ${ageGroup} texting style and ${detectedLanguage}. If Hinglish, write ONLY in casual Hinglish using words like "${tfidfKeywords.slice(0, 5).map(w => w.word).join('", "')}".
 2. Match ${targetPersonName}'s exact spelling, capitalization, and brevity.
 3. Stay in character at all times.
 
@@ -160,6 +193,7 @@ ${fewShotExamples || 'No pair samples available'}`;
   return {
     name: targetPersonName,
     archetype,
+    ageGroup,
     detectedLanguage,
     messageCount,
     avgWordsPerMsg,
