@@ -15,7 +15,17 @@ import { generatePersonaReply } from './services/personaEngine';
 export default function App() {
   const [personas, setPersonas] = useState(() => {
     const saved = localStorage.getItem('persona_echo_personas');
-    return saved ? JSON.parse(saved) : DEFAULT_PERSONAS;
+    let list = saved ? JSON.parse(saved) : DEFAULT_PERSONAS;
+    
+    // Deduplicate contacts by persona name to eliminate duplicate entries
+    const uniqueMap = new Map();
+    list.forEach(p => {
+      const key = (p.name || '').toLowerCase().trim();
+      if (key && !uniqueMap.has(key)) {
+        uniqueMap.set(key, p);
+      }
+    });
+    return uniqueMap.size > 0 ? Array.from(uniqueMap.values()) : DEFAULT_PERSONAS;
   });
 
   const [activePersonaId, setActivePersonaId] = useState(() => {

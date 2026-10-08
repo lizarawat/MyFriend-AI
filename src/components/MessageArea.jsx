@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Volume2, CheckCheck } from 'lucide-react';
+import { Volume2, CheckCheck, Sparkles } from 'lucide-react';
 
 export default function MessageArea({ messages, isTyping, persona }) {
   const bottomRef = useRef(null);
@@ -21,7 +21,10 @@ export default function MessageArea({ messages, isTyping, persona }) {
   return (
     <div className="messages-container">
       <div className="date-divider">
-        <span className="date-badge">Today • AI Replica Chat Session</span>
+        <span className="date-badge">
+          <Sparkles size={12} color="var(--accent-cyan)" style={{ display: 'inline', marginRight: 4 }} />
+          Today • {persona?.name || 'Persona'} AI Replica Session
+        </span>
       </div>
 
       {messages.map((msg, idx) => {
@@ -32,16 +35,31 @@ export default function MessageArea({ messages, isTyping, persona }) {
             {!isUser && <span className="sender-name-label">{persona?.name || 'Virtual Friend'}</span>}
             
             <div className="message-bubble">
-              <div>{msg.text}</div>
+              <div style={{ wordBreak: 'break-word' }}>{msg.text}</div>
               
-              {!isUser && (
-                <button className="voice-msg-btn" onClick={() => playTTS(msg.text)}>
-                  <Volume2 size={13} />
-                  <span>Listen</span>
-                </button>
-              )}
-
               <div className="msg-footer">
+                {!isUser && (
+                  <button 
+                    onClick={() => playTTS(msg.text)}
+                    title="Listen to voice"
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--text-dim)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 3,
+                      marginRight: 'auto',
+                      fontSize: '0.7rem',
+                      padding: 0
+                    }}
+                  >
+                    <Volume2 size={12} />
+                    <span>Listen</span>
+                  </button>
+                )}
+
                 <span>{msg.timestamp || '10:15 AM'}</span>
                 {isUser && <CheckCheck size={14} color="var(--accent-cyan)" />}
               </div>
