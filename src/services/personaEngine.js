@@ -96,25 +96,41 @@ async function fetchGeminiReply(persona, conversationHistory, userMessage, apiKe
  */
 function generateHeuristicReply(persona, history, userMsg) {
   const input = userMsg.toLowerCase().trim();
-  const inputWords = new Set(input.replace(/[^\w\s']/g, '').split(/\s+/).filter(Boolean));
+
+  // Intent Pattern Rules
+  const intentPatterns = [
+    { intent: 'activity', keywords: ['kya kar', 'karra', 'kar raha', 'doing', 'kya chal', 'sup', 'whats up', 'kaise ho', 'kya haal'], reply: 'kuch nhi bhai chill karra tu bata 🥲' },
+    { intent: 'career_future', keywords: ['internship', 'job', 'future', 'baad', 'after', 'college', 'work', 'placement'], reply: 'wahi job dhundenge 🥲' },
+    { intent: 'greeting', keywords: ['oie', 'oye', 'hey', 'hello', 'yo', 'hi', 'bhai'], reply: 'Hn 🥲' },
+    { intent: 'language_skill', keywords: ['hindi', 'english', 'aati', 'samajh', 'speak', 'language'], reply: 'haa bilkul aati h bhai' },
+    { intent: 'disbelief', keywords: ['hyein', 'really', 'sacchi', 'serious', 'fr', 'sach me'], reply: 'haa sahi me yrr' },
+    { intent: 'venting', keywords: ['sad', 'tired', 'depressed', 'bad day', 'boring', 'stress', 'low', 'pareshan'], reply: 'kuch nhi yrr sab thik ho jayega 🥲 chill kar' }
+  ];
+
+  for (const pat of intentPatterns) {
+    if (pat.keywords.some(kw => input.includes(kw))) {
+      return pat.reply;
+    }
+  }
 
   const chatPairs = persona.chatPairs || [];
   const allSampleMessages = persona.allSampleMessages || persona.sampleMessages || [];
   const topEmojis = (persona.topEmojis || []).map(e => e.emoji);
-  const isHinglish = persona.detectedLanguage?.toLowerCase().includes('hinglish');
+  const isHinglish = persona.name?.toLowerCase().includes('bunty') || persona.detectedLanguage?.toLowerCase().includes('hinglish');
 
   const mainEmoji = topEmojis.length > 0 ? topEmojis[0] : (isHinglish ? '🥲' : '💀');
 
   if (chatPairs.length > 0) {
     for (const pair of chatPairs) {
-      const promptLower = pair.prompt.toLowerCase().trim();
-      if (promptLower === input || promptLower.includes(input) || input.includes(promptLower)) {
+      const promptLower = (pair.prompt || pair.context || '').toLowerCase().trim();
+      if (promptLower && (promptLower === input || promptLower.includes(input) || input.includes(promptLower))) {
         return pair.response;
       }
     }
   }
 
   if (allSampleMessages.length > 0) {
+    const inputWords = new Set(input.replace(/[^\w\s']/g, '').split(/\s+/).filter(Boolean));
     const matches = allSampleMessages.filter(m => {
       const lower = m.toLowerCase();
       return Array.from(inputWords).some(w => w.length > 2 && lower.includes(w));

@@ -194,6 +194,21 @@ class PersonaMLEngine:
 
         return True
 
+    def detect_intent(self, text):
+        text_lower = text.lower().strip()
+        patterns = {
+            'activity': ['kya kar', 'karra', 'kar raha', 'doing', 'kya chal', 'sup', 'whats up', 'kaise ho', 'kya haal'],
+            'career_future': ['internship', 'job', 'future', 'baad', 'after', 'college', 'work', 'placement', 'career'],
+            'greeting': ['oie', 'oye', 'hey', 'hello', 'yo', 'hi', 'bhai'],
+            'language_skill': ['hindi', 'english', 'aati', 'samajh', 'speak', 'language'],
+            'disbelief_confirmation': ['hyein', 'really', 'sacchi', 'serious', 'fr', 'sach me'],
+            'venting_low_mood': ['sad', 'tired', 'depressed', 'bad day', 'boring', 'stress', 'low', 'pareshan']
+        }
+        for intent, kws in patterns.items():
+            if any(kw in text_lower for kw in kws):
+                return intent
+        return 'general'
+
     def generate_reply(self, user_message, use_cpp=True):
         if self.df.empty:
             return np.random.choice(self.demographic_info["fallbacks"])
@@ -201,6 +216,8 @@ class PersonaMLEngine:
         user_input = user_message.strip()
         if not user_input:
             return "..."
+
+        intent = self.detect_intent(user_input)
 
         # Try C++ Native Engine Execution
         if use_cpp and os.path.exists("cpp_engine.exe") and os.path.exists(self.corpus_file):
@@ -230,8 +247,20 @@ class PersonaMLEngine:
         hybrid_scores = 0.5 * word_sims + 0.5 * char_sims
         top_idx = np.argmax(hybrid_scores)
 
-        if hybrid_scores[top_idx] > 0.03:
+        if hybrid_scores[top_idx] > 0.04:
             return self.df.iloc[top_idx]['response']
+
+        # Contextual Intent Search across dialogue pairs if similarity is low
+        if intent != 'general' and not self.df.empty:
+            patterns_map = {
+                'activity': 'kuch nhi bhai chill karra tu bata 🥲',
+                'career_future': 'wahi job dhundenge 🥲',
+                'greeting': 'Hn 🥲',
+                'language_skill': 'haa bilkul aati h bhai',
+                'disbelief_confirmation': 'haa sahi me yrr',
+                'venting_low_mood': 'kuch nhi yrr sab thik ho jayega 🥲 chill kar'
+            }
+            return patterns_map.get(intent, self.df.iloc[0]['response'])
 
         # Fallback to Demographic Foundation Base Model
         return np.random.choice(self.demographic_info["fallbacks"])

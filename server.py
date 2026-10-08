@@ -126,6 +126,54 @@ def train_persona():
         'message': f'Python Scikit-Learn TF-IDF model trained for {target_person} on {len(df)} dialogue turns!'
     })
 
+INTENT_PATTERNS = {
+    'activity': {
+        'keywords': ['kya kar', 'karra', 'kar raha', 'doing', 'kya chal', 'sup', 'what up', 'whats up', 'kaise ho', 'kya haal', 'doing today'],
+        'default_hinglish': 'kuch nhi bhai chill karra tu bata 🥲'
+    },
+    'career_future': {
+        'keywords': ['internship', 'job', 'future', 'baad', 'after', 'college', 'work', 'placement', 'career'],
+        'default_hinglish': 'wahi job dhundenge 🥲'
+    },
+    'greeting': {
+        'keywords': ['oie', 'oye', 'hey', 'hello', 'yo', 'hi', 'bhai'],
+        'default_hinglish': 'Hn 🥲'
+    },
+    'language_skill': {
+        'keywords': ['hindi', 'english', 'aati', 'samajh', 'speak', 'language'],
+        'default_hinglish': 'haa bilkul aati h bhai'
+    },
+    'disbelief_confirmation': {
+        'keywords': ['hyein', 'really', 'sacchi', 'serious', 'fr', 'sach me'],
+        'default_hinglish': 'haa sahi me yrr'
+    },
+    'venting_low_mood': {
+        'keywords': ['sad', 'tired', 'depressed', 'bad day', 'boring', 'stress', 'low', 'pareshan'],
+        'default_hinglish': 'kuch nhi yrr sab thik ho jayega 🥲 chill kar'
+    }
+}
+
+def detect_situation_and_mood(user_text):
+    text_lower = user_text.lower().strip()
+    detected_intent = 'general'
+    detected_mood = 'neutral'
+
+    for intent_name, data in INTENT_PATTERNS.items():
+        if any(kw in text_lower for kw in data['keywords']):
+            detected_intent = intent_name
+            break
+
+    if any(w in text_lower for w in ['sad', 'tired', 'bad', 'low', 'pareshan', 'depressed', '🥲', '😭']):
+        detected_mood = 'sympathetic_low'
+    elif any(w in text_lower for w in ['haha', 'lol', 'lmao', 'fun', 'happy', '😂', '💀']):
+        detected_mood = 'playful_chill'
+    elif any(w in text_lower for w in ['why', 'how', 'kya', 'kab', 'where', 'tujhe', 'kya karra']):
+        detected_mood = 'curious_inquiry'
+    else:
+        detected_mood = 'casual_vibe'
+
+    return detected_intent, detected_mood
+
 @app.route('/api/generate', methods=['POST'])
 def generate_reply():
     data = request.json or {}
@@ -133,7 +181,7 @@ def generate_reply():
     user_message = data.get('user_message', '').strip()
     
     if not user_message:
-        return jsonify({'reply': '...'})
+        return jsonify({'reply': '...', 'intent': 'none', 'mood': 'neutral'})
         
     model = PERSONA_MODELS.get(persona_id)
     
@@ -163,10 +211,15 @@ def generate_reply():
 
     if not model:
         # Generic fallback if no ML model exists for this ID
-        return jsonify({'reply': 'Haa 🥲', 'mode': 'fallback'})
+        intent, mood = detect_situation_and_mood(user_message)
+        reply = INTENT_PATTERNS.get(intent, {}).get('default_hinglish', 'Haa 🥲')
+        return jsonify({'reply': reply, 'intent': intent, 'mood': mood, 'mode': 'fallback'})
 
     df = model['df']
     response_col = 'response' if 'response' in df.columns else df.columns[1]
+
+    # Detect Situation Intent & Mood
+    intent, mood = detect_situation_and_mood(user_message)
 
     # 1. Word Vector Cosine Similarity
     q_word_vec = model['word_vectorizer'].transform([user_message])
@@ -193,14 +246,26 @@ def generate_reply():
         if cand in recent and len(df) > 3:
             continue
             
-        if score > 0.02:
+        if score > 0.04:
             best_reply = cand
             break
 
+    # Intent-based Contextual Selection if no direct exact score match
+    if not best_reply and intent != 'general':
+        # Search df context lines for intent keywords
+        intent_kws = INTENT_PATTERNS[intent]['keywords']
+        for idx, row in df.iterrows():
+            ctx = str(row['context']).lower()
+            if any(kw in ctx for kw in intent_kws):
+                best_reply = row[response_col]
+                break
+
+        if not best_reply:
+            best_reply = INTENT_PATTERNS[intent]['default_hinglish']
+
     if not best_reply:
-        # Fallback to random response from dataframe
-        random_idx = np.random.randint(0, len(df))
-        best_reply = df.iloc[random_idx][response_col]
+        # Fallback to persona default intent fallback
+        best_reply = INTENT_PATTERNS.get(intent, {}).get('default_hinglish', df.iloc[0][response_col])
 
     # Update recent queue
     recent.append(best_reply)
@@ -210,8 +275,10 @@ def generate_reply():
 
     return jsonify({
         'reply': best_reply,
+        'intent': intent,
+        'mood': mood,
         'max_similarity_score': float(np.max(hybrid_scores)),
-        'mode': 'python_scikit_learn_tfidf'
+        'mode': 'python_scikit_learn_intent_tfidf'
     })
 
 if __name__ == '__main__':
