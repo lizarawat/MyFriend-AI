@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Upload, Folder, FileArchive, Sparkles, Check, AlertCircle } from 'lucide-react';
+import { X, Upload, Folder, FileArchive, Sparkles, Check, AlertCircle, User, MessageSquare } from 'lucide-react';
 import { parseChatLog, parseZipArchive, parseFolderFileList } from '../services/chatParser';
 import { analyzePersona } from '../services/personaAnalyzer';
 
@@ -8,6 +8,8 @@ export default function ImportModal({ onAddPersona, onClose }) {
   const [rawText, setRawText] = useState('');
   const [parsedResult, setParsedResult] = useState(null);
   const [selectedSpeaker, setSelectedSpeaker] = useState('');
+  const [customAgeGroup, setCustomAgeGroup] = useState('Gen-Z / Youth Texting (13-24)');
+  const [customDescription, setCustomDescription] = useState('Talks in short Hinglish lines, uses 🥲, very chill and casual.');
   const [customAvatar, setCustomAvatar] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -21,11 +23,9 @@ export default function ImportModal({ onAddPersona, onClose }) {
 
     try {
       if (file.name.toLowerCase().endsWith('.zip')) {
-        // Zip archive processing
         const res = await parseZipArchive(file);
         handleAnalysisResult(res);
       } else {
-        // Text / JSON processing
         const reader = new FileReader();
         reader.onload = (event) => {
           const content = event.target.result;
@@ -77,7 +77,6 @@ export default function ImportModal({ onAddPersona, onClose }) {
         const res = await parseZipArchive(items[0]);
         handleAnalysisResult(res);
       } else if (items.length > 1) {
-        // Folder or multi-file drop
         const res = await parseFolderFileList(items);
         handleAnalysisResult(res);
       } else {
@@ -108,7 +107,15 @@ export default function ImportModal({ onAddPersona, onClose }) {
     } else {
       setParsedResult(res);
       if (res.participants && res.participants.length > 0) {
-        setSelectedSpeaker(res.participants[0]);
+        // Auto-select speaker with highest message count or non-user
+        const sorted = [...res.participants].sort((a, b) => {
+          const countA = res.messages.filter(m => m.sender === a).length;
+          const countB = res.messages.filter(m => m.sender === b).length;
+          return countB - countA;
+        });
+        const buntySpeaker = sorted.find(p => p.toLowerCase().includes('bunty'));
+        const nonDotSpeaker = sorted.find(p => p.trim() !== '.' && p.trim().toLowerCase() !== 'you');
+        setSelectedSpeaker(buntySpeaker || nonDotSpeaker || sorted[0]);
       }
     }
   };
@@ -141,6 +148,8 @@ export default function ImportModal({ onAddPersona, onClose }) {
     const newPersona = {
       id: 'persona-' + Date.now(),
       name: selectedSpeaker,
+      ageGroup: customAgeGroup,
+      customFacts: customDescription,
       avatar: customAvatar.trim() || randomAvatar,
       ...analysis
     };
@@ -176,7 +185,7 @@ export default function ImportModal({ onAddPersona, onClose }) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 680 }}>
         <div className="modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Sparkles size={22} color="var(--accent-cyan)" />
@@ -222,7 +231,7 @@ export default function ImportModal({ onAddPersona, onClose }) {
           <div 
             onDragOver={handleDragOver}
             onDrop={handleDrop}
-            style={{ border: '2px dashed var(--border-glass-highlight)', borderRadius: 16, padding: 30, textAlign: 'center', background: 'rgba(30, 41, 59, 0.3)', marginBottom: 20 }}
+            style={{ border: '2px dashed var(--border-glass-highlight)', borderRadius: 16, padding: 24, textAlign: 'center', background: 'rgba(30, 41, 59, 0.3)', marginBottom: 20 }}
           >
             <div style={{ display: 'flex', justifyContent: 'center', gap: 14, marginBottom: 10 }}>
               <Upload size={32} color="var(--accent-cyan)" />
@@ -263,7 +272,7 @@ export default function ImportModal({ onAddPersona, onClose }) {
           <div style={{ marginBottom: 20 }}>
             <textarea 
               className="form-textarea" 
-              rows="6" 
+              rows="5" 
               placeholder={`Paste chat export lines here, e.g.:\n15/09/24, 10:15 - Bunty: deadass bro? 💀\n15/09/24, 10:16 - You: What are you doing?\n15/09/24, 10:17 - Bunty: lmao nothing much`}
               value={rawText}
               onChange={(e) => setRawText(e.target.value)}
@@ -297,32 +306,65 @@ export default function ImportModal({ onAddPersona, onClose }) {
           </div>
         )}
 
-        {/* Parsed Result Step: Select Person to Replicate */}
+        {/* Parsed Result Step: Select Target Speaker + Define Age & Personality */}
         {parsedResult && parsedResult.success && (
-          <div style={{ padding: 16, borderRadius: 14, background: 'rgba(0, 242, 254, 0.08)', border: '1px solid var(--border-glass-highlight)', marginTop: 16 }}>
-            <h4 style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--accent-cyan)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Check size={18} /> Analysis Complete: Found {parsedResult.totalMessages} Messages!
+          <div style={{ padding: 18, borderRadius: 14, background: 'rgba(0, 242, 254, 0.08)', border: '1px solid var(--border-glass-highlight)', marginTop: 16 }}>
+            <h4 style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--accent-cyan)', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Check size={18} /> Analysis Complete: Found {parsedResult.totalMessages} Messages across {parsedResult.participants.length} People!
             </h4>
 
-            <div className="form-group">
-              <label className="form-label">Select which friend you want to turn into an AI Bot:</label>
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                {parsedResult.participants.map(p => (
-                  <button 
-                    key={p} 
-                    className={`btn-secondary ${selectedSpeaker === p ? 'btn-primary' : ''}`}
-                    onClick={() => setSelectedSpeaker(p)}
-                    style={{ fontSize: '0.85rem', padding: '8px 16px' }}
-                  >
-                    👤 {p}
-                  </button>
-                ))}
+            {/* 1. Participant Selector */}
+            <div className="form-group" style={{ marginBottom: 14 }}>
+              <label className="form-label" style={{ fontWeight: 700 }}>1. Select which person from this file should be the AI Bot:</label>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 6 }}>
+                {parsedResult.participants.map(p => {
+                  const msgCount = parsedResult.messages.filter(m => m.sender === p).length;
+                  const isSel = selectedSpeaker === p;
+                  return (
+                    <button 
+                      key={p} 
+                      className={`btn-secondary ${isSel ? 'btn-primary' : ''}`}
+                      onClick={() => setSelectedSpeaker(p)}
+                      style={{ fontSize: '0.85rem', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 6 }}
+                    >
+                      <User size={14} /> {p} <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>({msgCount} msgs)</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end' }}>
-              <button className="btn-primary" onClick={handleCreatePersona} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Sparkles size={16} /> Generate Virtual Replica Bot
+            {/* 2. Age / Demographic Category */}
+            <div className="form-group" style={{ marginBottom: 14 }}>
+              <label className="form-label" style={{ fontWeight: 700 }}>2. Age / Demographic Group:</label>
+              <select 
+                className="form-input" 
+                value={customAgeGroup} 
+                onChange={(e) => setCustomAgeGroup(e.target.value)}
+                style={{ fontSize: '0.875rem' }}
+              >
+                <option value="Gen-Z / Youth Texting (13-24)">Gen-Z / Youth Texting (13-24)</option>
+                <option value="Millennial / Young Adult (25-35)">Millennial / Young Adult (25-35)</option>
+                <option value="Adult / Formal Communicator (36+)">Adult / Formal Communicator (36+)</option>
+              </select>
+            </div>
+
+            {/* 3. Personality & Tone Description */}
+            <div className="form-group" style={{ marginBottom: 14 }}>
+              <label className="form-label" style={{ fontWeight: 700 }}>3. Personality & Style Description (Custom Notes):</label>
+              <textarea 
+                className="form-textarea" 
+                rows="2" 
+                placeholder="Describe how they talk, e.g. 'Uses 🥲 a lot, talks in short Hinglish lines, very chill'"
+                value={customDescription}
+                onChange={(e) => setCustomDescription(e.target.value)}
+                style={{ fontSize: '0.85rem' }}
+              />
+            </div>
+
+            <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
+              <button className="btn-primary" onClick={handleCreatePersona} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '12px 24px' }}>
+                <Sparkles size={16} /> Generate {selectedSpeaker || 'Virtual'} Replica Bot
               </button>
             </div>
           </div>

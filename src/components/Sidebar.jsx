@@ -1,21 +1,41 @@
 import React, { useState } from 'react';
-import { Search, Plus, Key, Users, Sparkles, MessageSquare, Bot } from 'lucide-react';
+import { Search, Plus, Key, Users, Sparkles, Bot, Trash2, Eye, EyeOff } from 'lucide-react';
 
 export default function Sidebar({ 
   personas, 
   activePersonaId, 
   onSelectPersona, 
+  onDeletePersona,
+  onToggleHidePersona,
   onOpenImport, 
   onOpenApiKey,
   onOpenGroupChat,
   lastMessages
 }) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [showHidden, setShowHidden] = useState(false);
 
-  const filteredPersonas = personas.filter(p => 
-    p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (p.archetype && p.archetype.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const hiddenCount = personas.filter(p => p.hidden).length;
+
+  const filteredPersonas = personas.filter(p => {
+    if (!showHidden && p.hidden) return false;
+
+    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (p.archetype && p.archetype.toLowerCase().includes(searchTerm.toLowerCase()));
+    return matchesSearch;
+  });
+
+  const handleDelete = (e, persona) => {
+    e.stopPropagation();
+    if (window.confirm(`Are you sure you want to delete ${persona.name}? This will remove all learned chat data.`)) {
+      onDeletePersona(persona.id);
+    }
+  };
+
+  const handleHideToggle = (e, persona) => {
+    e.stopPropagation();
+    onToggleHidePersona(persona.id);
+  };
 
   return (
     <aside className="sidebar">
@@ -65,6 +85,18 @@ export default function Sidebar({
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
+
+        {hiddenCount > 0 && (
+          <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end' }}>
+            <button 
+              onClick={() => setShowHidden(!showHidden)} 
+              style={{ background: 'transparent', border: 'none', color: 'var(--accent-cyan)', fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+            >
+              {showHidden ? <EyeOff size={12} /> : <Eye size={12} />}
+              {showHidden ? 'Hide Hidden Persons' : `Show Hidden (${hiddenCount})`}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Contacts List */}
@@ -79,6 +111,7 @@ export default function Sidebar({
               key={persona.id} 
               className={`contact-item ${isActive ? 'active' : ''}`}
               onClick={() => onSelectPersona(persona.id)}
+              style={{ opacity: persona.hidden ? 0.6 : 1 }}
             >
               <div className="avatar-wrap">
                 <img src={persona.avatar} alt={persona.name} className="avatar-img" />
@@ -87,8 +120,25 @@ export default function Sidebar({
 
               <div className="contact-info">
                 <div className="contact-top-row">
-                  <span className="contact-name">{persona.name}</span>
-                  <span className="contact-time">Online</span>
+                  <span className="contact-name">{persona.name} {persona.hidden ? '(Hidden)' : ''}</span>
+                  <div style={{ display: 'flex', gap: 4 }} className="contact-actions">
+                    <button 
+                      className="icon-btn" 
+                      onClick={(e) => handleHideToggle(e, persona)} 
+                      title={persona.hidden ? "Unhide Person" : "Hide Person"}
+                      style={{ width: 24, height: 24, border: 'none' }}
+                    >
+                      {persona.hidden ? <Eye size={13} color="var(--accent-cyan)" /> : <EyeOff size={13} />}
+                    </button>
+                    <button 
+                      className="icon-btn" 
+                      onClick={(e) => handleDelete(e, persona)} 
+                      title="Delete Person"
+                      style={{ width: 24, height: 24, border: 'none' }}
+                    >
+                      <Trash2 size={13} color="#fca5a5" />
+                    </button>
+                  </div>
                 </div>
                 <div className="contact-preview">
                   <span className="last-msg">{lastMsg}</span>

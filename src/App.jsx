@@ -64,7 +64,7 @@ export default function App() {
     localStorage.setItem('persona_echo_gemini_key', apiKey);
   }, [apiKey]);
 
-  const activePersona = personas.find(p => p.id === activePersonaId) || personas[0];
+  const activePersona = personas.find(p => p.id === activePersonaId) || personas.find(p => !p.hidden) || personas[0];
   const activeMessages = chatHistories[activePersonaId] || [];
 
   const lastMessages = {};
@@ -126,12 +126,39 @@ export default function App() {
     setPersonas(prev => prev.map(p => p.id === updatedPersona.id ? updatedPersona : p));
   };
 
+  const handleDeletePersona = (idToDelete) => {
+    const remaining = personas.filter(p => p.id !== idToDelete);
+    setPersonas(remaining);
+    
+    // Clean up history
+    setChatHistories(prev => {
+      const copy = { ...prev };
+      delete copy[idToDelete];
+      return copy;
+    });
+
+    if (activePersonaId === idToDelete && remaining.length > 0) {
+      setActivePersonaId(remaining[0].id);
+    }
+  };
+
+  const handleToggleHidePersona = (idToToggle) => {
+    setPersonas(prev => prev.map(p => {
+      if (p.id === idToToggle) {
+        return { ...p, hidden: !p.hidden };
+      }
+      return p;
+    }));
+  };
+
   return (
     <div className="app-container">
       <Sidebar 
         personas={personas}
         activePersonaId={activePersonaId}
         onSelectPersona={setActivePersonaId}
+        onDeletePersona={handleDeletePersona}
+        onToggleHidePersona={handleToggleHidePersona}
         onOpenImport={() => setIsImportOpen(true)}
         onOpenApiKey={() => setIsApiKeyOpen(true)}
         onOpenGroupChat={() => setIsGroupChatOpen(true)}

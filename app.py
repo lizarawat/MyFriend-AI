@@ -6,9 +6,110 @@ from tkinter import filedialog, messagebox
 import customtkinter as ctk
 from persona_ml import PersonaMLEngine
 
-# Set CustomTkinter Theme to Dark Glassmorphism
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
+
+class PersonSetupDialog(ctk.CTkToplevel):
+    def __init__(self, parent, participants_summary):
+        super().__init__(parent)
+
+        self.title("Configure Person & Demographic Profile")
+        self.geometry("520 x 560")
+        self.resizable(False, False)
+        self.grab_set()
+
+        self.participants_summary = participants_summary
+        self.result = None
+
+        self.build_ui()
+
+    def build_ui(self):
+        # Header
+        lbl_title = ctk.CTkLabel(
+            self, 
+            text="✨ Select Person & Define Personality", 
+            font=ctk.CTkFont(size=18, weight="bold"),
+            text_color="#00f2fe"
+        )
+        lbl_title.pack(padx=20, pady=(20, 5))
+
+        lbl_sub = ctk.CTkLabel(
+            self, 
+            text="Choose which speaker from the chat log you want to turn into an AI bot:", 
+            font=ctk.CTkFont(size=12),
+            text_color="#9ca3af"
+        )
+        lbl_sub.pack(padx=20, pady=(0, 15))
+
+        # 1. Select Participant Dropdown
+        ctk.CTkLabel(self, text="Select Target Person from Chat File:", font=ctk.CTkFont(size=12, weight="bold")).pack(padx=20, anchor="w")
+        
+        participant_options = [f"{name} ({count} msgs)" for name, count in self.participants_summary]
+        self.participant_combo = ctk.CTkComboBox(
+            self, 
+            values=participant_options,
+            font=ctk.CTkFont(size=13),
+            dropdown_font=ctk.CTkFont(size=12),
+            height=38
+        )
+        self.participant_combo.pack(padx=20, pady=(4, 15), fill="x")
+        if participant_options:
+            bunty_opt = next((opt for opt in participant_options if "bunty" in opt.lower()), None)
+            non_dot_opt = next((opt for opt in participant_options if not opt.startswith(".")), None)
+            default_sel = bunty_opt or non_dot_opt or participant_options[0]
+            self.participant_combo.set(default_sel)
+
+        # 2. Age / Demographic Category
+        ctk.CTkLabel(self, text="Age / Demographic Group:", font=ctk.CTkFont(size=12, weight="bold")).pack(padx=20, anchor="w")
+        
+        age_options = [
+            "Gen-Z / Youth Texting (13-24)",
+            "Millennial / Young Adult (25-35)",
+            "Adult / Formal Communicator (36+)"
+        ]
+        self.age_combo = ctk.CTkComboBox(
+            self, 
+            values=age_options,
+            font=ctk.CTkFont(size=13),
+            dropdown_font=ctk.CTkFont(size=12),
+            height=38
+        )
+        self.age_combo.pack(padx=20, pady=(4, 15), fill="x")
+        self.age_combo.set("Gen-Z / Youth Texting (13-24)")
+
+        # 3. Personality & Tone Description
+        ctk.CTkLabel(self, text="Personality & Style Description (Custom Notes):", font=ctk.CTkFont(size=12, weight="bold")).pack(padx=20, anchor="w")
+        
+        self.desc_textbox = ctk.CTkTextbox(self, height=100, font=ctk.CTkFont(size=12))
+        self.desc_textbox.pack(padx=20, pady=(4, 20), fill="x")
+        self.desc_textbox.insert("1.0", "Talks in short Hinglish lines, uses 🥲, very chill, funny.")
+
+        # Confirm Button
+        btn_confirm = ctk.CTkButton(
+            self, 
+            text="Generate Virtual Replica Bot 🚀", 
+            font=ctk.CTkFont(size=14, weight="bold"),
+            fg_color="#00f2fe",
+            text_color="#000000",
+            hover_color="#38bdf8",
+            height=45,
+            command=self.on_confirm
+        )
+        btn_confirm.pack(padx=20, pady=10, fill="x")
+
+    def on_confirm(self):
+        selected_str = self.participant_combo.get()
+        target_name = selected_str.split(" (")[0].strip() if "(" in selected_str else selected_str.strip()
+        age_group = self.age_combo.get()
+        description = self.desc_textbox.get("1.0", tk.END).strip()
+
+        self.result = {
+            "target_name": target_name,
+            "age_group": age_group,
+            "description": description
+        }
+        self.destroy()
+
 
 class MyFriendAIApp(ctk.CTk):
     def __init__(self):
@@ -17,10 +118,10 @@ class MyFriendAIApp(ctk.CTk):
         self.title("MyFriend AI - Virtual Person Replica Suite (Python & C++ Engine)")
         self.geometry("1100 x 700")
 
-        # Active personas storage
         self.personas = {}
         self.active_persona_id = None
         self.chat_histories = {}
+        self.show_hidden = False
 
         self.init_default_personas()
         self.build_ui()
@@ -41,12 +142,13 @@ class MyFriendAIApp(ctk.CTk):
 15/09/24, 10:19 - Bunty: haa sahi me yrr
         """
         msgs = bunty_engine.parse_raw_text(sample_bunty_raw)
-        bunty_engine.train(msgs)
+        bunty_engine.train(msgs, user_description="Uses 🥲 and short Hinglish lines", user_age="Gen-Z (18-24)")
 
         self.personas["bunty"] = {
             "name": "Bunty",
             "tag": "Hinglish Desi Viber",
-            "engine": bunty_engine
+            "engine": bunty_engine,
+            "hidden": False
         }
         self.chat_histories["bunty"] = [
             {"sender": "Bunty", "text": "Hn 🥲"}
@@ -63,12 +165,13 @@ class MyFriendAIApp(ctk.CTk):
 15/09/24, 10:17 - Alex: sureee because that makes total sense 💀
         """
         alex_msgs = alex_engine.parse_raw_text(sample_alex_raw)
-        alex_engine.train(alex_msgs)
+        alex_engine.train(alex_msgs, user_description="Sarcastic dry humor", user_age="Gen-Z")
 
         self.personas["alex"] = {
             "name": "Alex",
             "tag": "Sarcastic & Witty",
-            "engine": alex_engine
+            "engine": alex_engine,
+            "hidden": False
         }
         self.chat_histories["alex"] = [
             {"sender": "Alex", "text": "yo deadass chilling 💀"}
@@ -77,15 +180,13 @@ class MyFriendAIApp(ctk.CTk):
         self.active_persona_id = "bunty"
 
     def build_ui(self):
-        # Main Grid Layout
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
-        # ----------------- SIDEBAR (WhatsApp-style Contact List) -----------------
+        # SIDEBAR
         self.sidebar_frame = ctk.CTkFrame(self, width=320, corner_radius=0, fg_color="#0b101a")
         self.sidebar_frame.grid(row=0, column=0, sticky="nsew")
 
-        # Logo / Title
         self.logo_label = ctk.CTkLabel(
             self.sidebar_frame, 
             text="🤖 MyFriend AI", 
@@ -102,7 +203,6 @@ class MyFriendAIApp(ctk.CTk):
         )
         self.sub_logo.pack(padx=20, pady=(0, 15))
 
-        # Import Chat Button
         self.import_btn = ctk.CTkButton(
             self.sidebar_frame,
             text="+ Import Chat / Zip / Folder",
@@ -116,28 +216,38 @@ class MyFriendAIApp(ctk.CTk):
         )
         self.import_btn.pack(padx=16, pady=10, fill="x")
 
+        # Toggle Show/Hide Hidden Contacts
+        self.toggle_hidden_btn = ctk.CTkButton(
+            self.sidebar_frame,
+            text="👁️ Show Hidden Persons",
+            font=ctk.CTkFont(size=11),
+            fg_color="transparent",
+            hover_color="#1e293b",
+            text_color="#9ca3af",
+            command=self.toggle_show_hidden
+        )
+        self.toggle_hidden_btn.pack(padx=16, pady=(0, 10), anchor="e")
+
         self.contacts_label = ctk.CTkLabel(
             self.sidebar_frame, 
             text="VIRTUAL FRIENDS", 
             font=ctk.CTkFont(size=11, weight="bold"),
             text_color="#6b7280"
         )
-        self.contacts_label.pack(padx=20, pady=(15, 5), anchor="w")
+        self.contacts_label.pack(padx=20, pady=(5, 5), anchor="w")
 
-        # Contact List Scrollable Frame
         self.contacts_list_frame = ctk.CTkScrollableFrame(self.sidebar_frame, fg_color="transparent")
         self.contacts_list_frame.pack(padx=10, pady=5, fill="both", expand=True)
 
         self.render_contact_buttons()
 
-        # ----------------- MAIN CHAT AREA -----------------
+        # MAIN CHAT AREA
         self.chat_main_frame = ctk.CTkFrame(self, fg_color="#111827", corner_radius=0)
         self.chat_main_frame.grid(row=0, column=1, sticky="nsew")
 
         self.chat_main_frame.grid_columnconfigure(0, weight=1)
         self.chat_main_frame.grid_rowconfigure(1, weight=1)
 
-        # Header
         self.header_frame = ctk.CTkFrame(self.chat_main_frame, height=60, fg_color="#1e293b", corner_radius=0)
         self.header_frame.grid(row=0, column=0, sticky="ew")
 
@@ -161,11 +271,9 @@ class MyFriendAIApp(ctk.CTk):
         )
         self.engine_badge.pack(side="right", padx=20, pady=12)
 
-        # Chat History Scrollable Box
         self.chat_box = ctk.CTkScrollableFrame(self.chat_main_frame, fg_color="#0d131f")
         self.chat_box.grid(row=1, column=0, sticky="nsew", padx=20, pady=15)
 
-        # Chat Input Controls
         self.input_frame = ctk.CTkFrame(self.chat_main_frame, height=70, fg_color="#1e293b", corner_radius=0)
         self.input_frame.grid(row=2, column=0, sticky="ew")
 
@@ -195,24 +303,78 @@ class MyFriendAIApp(ctk.CTk):
 
         self.render_chat_messages()
 
+    def toggle_show_hidden(self):
+        self.show_hidden = not self.show_hidden
+        self.toggle_hidden_btn.configure(text="👁️ Hide Hidden Persons" if self.show_hidden else "👁️ Show Hidden Persons")
+        self.render_contact_buttons()
+
     def render_contact_buttons(self):
         for widget in self.contacts_list_frame.winfo_children():
             widget.destroy()
 
-        for pid, pdata in self.personas.items():
+        for pid, pdata in list(self.personas.items()):
+            if pdata.get("hidden", False) and not self.show_hidden:
+                continue
+
             is_active = (pid == self.active_persona_id)
+
+            item_row = ctk.CTkFrame(self.contacts_list_frame, fg_color="#1e293b" if is_active else "transparent", height=45)
+            item_row.pack(fill="x", pady=3)
+
             btn = ctk.CTkButton(
-                self.contacts_list_frame,
-                text=f"👤 {pdata['name']} ({pdata['tag']})",
+                item_row,
+                text=f"👤 {pdata['name']} {'(Hidden)' if pdata.get('hidden') else ''}",
                 font=ctk.CTkFont(size=13, weight="bold" if is_active else "normal"),
                 anchor="w",
-                fg_color="#1e293b" if is_active else "transparent",
+                fg_color="transparent",
                 text_color="#00f2fe" if is_active else "#9ca3af",
                 hover_color="#1e293b",
                 height=45,
                 command=lambda p=pid: self.select_persona(p)
             )
-            btn.pack(fill="x", pady=3)
+            btn.pack(side="left", fill="x", expand=True)
+
+            hide_btn = ctk.CTkButton(
+                item_row,
+                text="👁️" if pdata.get("hidden") else "🙈",
+                width=30,
+                height=30,
+                fg_color="transparent",
+                hover_color="#374151",
+                command=lambda p=pid: self.toggle_hide_persona(p)
+            )
+            hide_btn.pack(side="right", padx=2)
+
+            del_btn = ctk.CTkButton(
+                item_row,
+                text="🗑️",
+                width=30,
+                height=30,
+                fg_color="transparent",
+                hover_color="#ef4444",
+                command=lambda p=pid: self.delete_persona(p)
+            )
+            del_btn.pack(side="right", padx=2)
+
+    def delete_persona(self, pid):
+        pname = self.personas[pid]["name"]
+        if messagebox.askyesno("Confirm Delete", f"Are you sure you want to permanently delete {pname}?"):
+            del self.personas[pid]
+            if pid in self.chat_histories:
+                del self.chat_histories[pid]
+
+            remaining = list(self.personas.keys())
+            if remaining:
+                self.select_persona(remaining[0])
+            else:
+                self.active_persona_id = None
+                self.header_title.configure(text="No Contact Selected")
+                self.render_contact_buttons()
+                self.render_chat_messages()
+
+    def toggle_hide_persona(self, pid):
+        self.personas[pid]["hidden"] = not self.personas[pid].get("hidden", False)
+        self.render_contact_buttons()
 
     def select_persona(self, pid):
         self.active_persona_id = pid
@@ -223,6 +385,9 @@ class MyFriendAIApp(ctk.CTk):
     def render_chat_messages(self):
         for widget in self.chat_box.winfo_children():
             widget.destroy()
+
+        if not self.active_persona_id:
+            return
 
         msgs = self.chat_histories.get(self.active_persona_id, [])
         for m in msgs:
@@ -256,11 +421,9 @@ class MyFriendAIApp(ctk.CTk):
 
         self.msg_entry.delete(0, tk.END)
 
-        # Add user message
         self.chat_histories[self.active_persona_id].append({"sender": "You", "text": text})
         self.render_chat_messages()
 
-        # Generate ML reply using Python & C++ Engine
         pdata = self.personas[self.active_persona_id]
         engine = pdata["engine"]
 
@@ -277,13 +440,29 @@ class MyFriendAIApp(ctk.CTk):
         if not file_path:
             return
 
-        target_name = ctk.CTkInputDialog(text="Enter the name of your friend in this chat export:", title="Friend Name").get_input()
-        if not target_name:
+        # Parse messages first to find all participants
+        temp_engine = PersonaMLEngine("Temp")
+        msgs = temp_engine.parse_chat_file(file_path)
+        
+        if not msgs:
+            messagebox.showerror("Error", "Could not parse any messages from this chat file.")
             return
 
-        engine = PersonaMLEngine(target_name.strip())
-        msgs = engine.parse_chat_file(file_path)
-        success = engine.train(msgs)
+        participants_summary = PersonaMLEngine.get_participants_summary(msgs)
+
+        # Open Setup Dialog to let user pick target person + describe age & personality
+        dialog = PersonSetupDialog(self, participants_summary)
+        self.wait_window(dialog)
+
+        if not dialog.result:
+            return
+
+        target_name = dialog.result["target_name"]
+        age_group = dialog.result["age_group"]
+        description = dialog.result["description"]
+
+        engine = PersonaMLEngine(target_name)
+        success = engine.train(msgs, user_description=description, user_age=age_group)
 
         if not success:
             messagebox.showerror("Error", f"Could not find any dialogue turns for {target_name} in this file.")
@@ -291,12 +470,13 @@ class MyFriendAIApp(ctk.CTk):
 
         pid = "persona-" + target_name.lower().replace(" ", "_")
         self.personas[pid] = {
-            "name": target_name.strip(),
-            "tag": "Custom ML Persona",
-            "engine": engine
+            "name": target_name,
+            "tag": age_group.split(" ")[0],
+            "engine": engine,
+            "hidden": False
         }
         self.chat_histories[pid] = [
-            {"sender": target_name.strip(), "text": f"Hey! I've analyzed our chats with Python & C++ ML and I'm ready to talk!"}
+            {"sender": target_name, "text": f"Hey! I've analyzed our chats with Python & C++ ML and I'm ready to talk!"}
         ]
 
         self.select_persona(pid)

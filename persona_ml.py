@@ -41,6 +41,8 @@ class PersonaMLEngine:
         self.word_matrix = None
         self.char_matrix = None
         self.df = pd.DataFrame()
+        self.user_description = ""
+        self.user_age = ""
         self.demographic_group = "millennial"
         self.demographic_info = DEMOGRAPHIC_BASE_MODELS["millennial"]
         self.corpus_file = f"corpus_{target_name.lower().replace(' ', '_')}.txt"
@@ -85,11 +87,33 @@ class PersonaMLEngine:
 
         return messages
 
-    def classify_demographic_age_group(self, target_texts):
+    @staticmethod
+    def get_participants_summary(messages):
         """
-        Classifies persona into Age Group Demographics (Gen-Z, Millennial, Adult/Elder)
-        using internet texting feature scores.
+        Returns a dictionary of participant names and their total message counts.
         """
+        counts = {}
+        for m in messages:
+            s = m['sender']
+            counts[s] = counts.get(s, 0) + 1
+        return sorted(counts.items(), key=lambda x: x[1], reverse=True)
+
+    def classify_demographic_age_group(self, target_texts, user_age_input=""):
+        """
+        Classifies persona into Age Group Demographics using text features & user explicit age input.
+        """
+        if user_age_input:
+            lower_age = str(user_age_input).lower()
+            if "gen" in lower_age or "1" in lower_age or "20" in lower_age or "teen" in lower_age:
+                self.demographic_group = "gen_z"
+            elif "adult" in lower_age or "4" in lower_age or "5" in lower_age or "elder" in lower_age:
+                self.demographic_group = "adult_elder"
+            else:
+                self.demographic_group = "millennial"
+
+            self.demographic_info = DEMOGRAPHIC_BASE_MODELS[self.demographic_group]
+            return self.demographic_info
+
         genz_score = 0
         millennial_score = 0
         adult_score = 0
@@ -119,12 +143,15 @@ class PersonaMLEngine:
         self.demographic_info = DEMOGRAPHIC_BASE_MODELS[self.demographic_group]
         return self.demographic_info
 
-    def train(self, messages):
+    def train(self, messages, user_description="", user_age=""):
         """
-        Extracts dialogue turn pairs, computes demographic classification, and trains ML models.
+        Extracts dialogue turn pairs, sets explicit age/description, and trains ML models.
         """
+        self.user_description = user_description
+        self.user_age = user_age
+
         target_texts = [m['text'] for m in messages if m['sender'].lower() == self.target_name.lower()]
-        self.classify_demographic_age_group(target_texts)
+        self.classify_demographic_age_group(target_texts, user_age_input=user_age)
 
         turn_pairs = []
         for i in range(len(messages) - 1):
