@@ -160,7 +160,18 @@ export default function ImportModal({ onAddPersona, onClose }) {
 
   const loadSampleDataset = (type) => {
     let sampleLog = '';
-    if (type === 'sarcastic') {
+    if (type === 'bunty') {
+      sampleLog = `15/09/24, 10:15 - You: oie
+15/09/24, 10:15 - Bunty: Hn
+15/09/24, 10:16 - You: kya karra tu
+15/09/24, 10:16 - Bunty: kuch nhi bhai chill karra tu bata 🥲
+15/09/24, 10:17 - You: tujhe hindi aati hai?
+15/09/24, 10:17 - Bunty: haa bilkul aati h bhai
+15/09/24, 10:18 - You: kya internship ke baad?
+15/09/24, 10:18 - Bunty: wahi job dhundenge 🥲
+15/09/24, 10:19 - You: hyein??
+15/09/24, 10:19 - Bunty: haa sahi me yrr`;
+    } else if (type === 'sarcastic') {
       sampleLog = `15/09/24, 10:15 - Alex: deadass bro? 💀
 15/09/24, 10:16 - You: Yeah man what are you doing today?
 15/09/24, 10:16 - Alex: lol okay whatever you say 😒
@@ -285,7 +296,13 @@ export default function ImportModal({ onAddPersona, onClose }) {
 
         {/* Tab 3: Sample Datasets */}
         {activeTab === 'sample' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 20 }}>
+            <div className="glass-card" style={{ padding: 16, cursor: 'pointer', textAlign: 'center', borderColor: 'var(--accent-cyan)' }} onClick={() => loadSampleDataset('bunty')}>
+              <div style={{ fontSize: '1.5rem', marginBottom: 6 }}>🥲</div>
+              <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--accent-cyan)' }}>Bunty (Hinglish)</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Chill Hinglish viber, 🥲, job dhundenge</div>
+            </div>
+
             <div className="glass-card" style={{ padding: 16, cursor: 'pointer', textAlign: 'center' }} onClick={() => loadSampleDataset('sarcastic')}>
               <div style={{ fontSize: '1.5rem', marginBottom: 6 }}>💀</div>
               <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>Alex (Sarcastic)</div>

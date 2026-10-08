@@ -19,7 +19,7 @@ export default function App() {
   });
 
   const [activePersonaId, setActivePersonaId] = useState(() => {
-    return personas[0]?.id || 'alex-sarcastic';
+    return personas[0]?.id || 'bunty-hinglish';
   });
 
   const [chatHistories, setChatHistories] = useState(() => {
@@ -27,6 +27,9 @@ export default function App() {
     if (saved) return JSON.parse(saved);
     
     return {
+      'bunty-hinglish': [
+        { sender: 'bot', text: 'kuch nhi bhai chill karra tu bata 🥲', timestamp: '10:15 AM' }
+      ],
       'alex-sarcastic': [
         { sender: 'bot', text: 'yo what\'s up? deadass chilling 💀', timestamp: '10:15 AM' }
       ],
