@@ -1,20 +1,34 @@
-import React, { useState } from 'react';
-import { Send, Mic, Sparkles, Smile } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Send, Mic, Sparkles } from 'lucide-react';
 
 export default function ChatInput({ onSendMessage, persona, disabled }) {
   const [text, setText] = useState('');
   const [isListening, setIsListening] = useState(false);
+  const inputRef = useRef(null);
+
+  // Persistent auto-focus on mount, persona change, and when bot finishes typing
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, [persona?.id, disabled]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!text.trim() || disabled) return;
-    onSendMessage(text);
+    const toSend = text;
     setText('');
+    onSendMessage(toSend);
+    // Keep focus in dialogue box so user can immediately type again without clicking!
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 10);
   };
 
   const handleQuickPrompt = (promptText) => {
     if (disabled) return;
     onSendMessage(promptText);
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 10);
   };
 
   // Web Speech API for Mic Dictation
@@ -36,10 +50,14 @@ export default function ChatInput({ onSendMessage, persona, disabled }) {
     recognition.lang = 'en-US';
 
     recognition.onstart = () => setIsListening(true);
-    recognition.onend = () => setIsListening(false);
+    recognition.onend = () => {
+      setIsListening(false);
+      inputRef.current?.focus();
+    };
     recognition.onresult = (event) => {
       const transcript = event.results[0][0].transcript;
       setText(prev => (prev ? prev + ' ' + transcript : transcript));
+      inputRef.current?.focus();
     };
 
     recognition.start();
@@ -49,7 +67,9 @@ export default function ChatInput({ onSendMessage, persona, disabled }) {
     "What are you up to right now?",
     "Tell me a story or secret!",
     "Give me your honest opinion on pizza",
-    "How was your day going?"
+    "How was your day going?",
+    "ghoomne chale kahi?",
+    "kaha chale?"
   ];
 
   return (
@@ -84,12 +104,13 @@ export default function ChatInput({ onSendMessage, persona, disabled }) {
         </button>
 
         <input 
+          ref={inputRef}
           type="text" 
           className="chat-input-field" 
-          placeholder={`Message ${persona?.name || 'virtual friend'}...`}
+          placeholder={`Message ${persona?.name || 'virtual friend'}... (Press Enter to send)`}
           value={text}
           onChange={(e) => setText(e.target.value)}
-          disabled={disabled}
+          autoFocus
         />
 
         <button type="submit" className="send-btn" disabled={!text.trim() || disabled}>

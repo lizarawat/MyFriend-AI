@@ -2,10 +2,15 @@ import React, { useEffect, useRef } from 'react';
 import { Volume2, CheckCheck, Sparkles } from 'lucide-react';
 
 export default function MessageArea({ messages, isTyping, persona }) {
-  const bottomRef = useRef(null);
+  const containerRef = useRef(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (containerRef.current) {
+      containerRef.current.scrollTo({
+        top: containerRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
   }, [messages, isTyping]);
 
   const playTTS = (text) => {
@@ -19,7 +24,7 @@ export default function MessageArea({ messages, isTyping, persona }) {
   };
 
   return (
-    <div className="messages-container">
+    <div className="messages-container" ref={containerRef}>
       <div className="date-divider">
         <span className="date-badge">
           <Sparkles size={12} color="var(--accent-cyan)" style={{ display: 'inline', marginRight: 4 }} />

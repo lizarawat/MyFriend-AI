@@ -1,7 +1,14 @@
 import React from 'react';
-import { SlidersHorizontal, Volume2, BarChart3 } from 'lucide-react';
+import { SlidersHorizontal, Volume2, BarChart3, GraduationCap } from 'lucide-react';
 
-export default function ChatHeader({ persona, onOpenInspector, onOpenDataScience, apiKey }) {
+export default function ChatHeader({ 
+  persona, 
+  onOpenInspector, 
+  onOpenDataScience, 
+  onToggleTeacher,
+  isTeacherOpen,
+  apiKey 
+}) {
   if (!persona) return null;
 
   const playVoiceSample = () => {
@@ -39,20 +46,36 @@ export default function ChatHeader({ persona, onOpenInspector, onOpenDataScience
               background: 'var(--accent-emerald)',
               display: 'inline-block'
             }}></span>
-            {hasApiKey ? 'Gemini 1.5 LLM Engine Active' : 'TF-IDF & Markov Micro-LLM Active'}
+            {hasApiKey ? 'Gemini 1.5 LLM Engine Active' : 'TF-IDF & Anti-Repetition NLP Active'}
           </div>
         </div>
       </div>
 
       {/* Trait Chips & Action Buttons */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <button 
+          className="icon-btn" 
+          onClick={onToggleTeacher}
+          title="Teach persona what to say and how to behave"
+          style={{
+            width: 'auto',
+            padding: '0 12px',
+            gap: 6,
+            background: isTeacherOpen ? 'rgba(0, 242, 254, 0.18)' : 'rgba(255, 255, 255, 0.05)',
+            borderColor: isTeacherOpen ? 'var(--accent-cyan)' : 'var(--border-glass)'
+          }}
+        >
+          <GraduationCap size={16} color="var(--accent-cyan)" />
+          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-cyan)' }}>Teach Bot</span>
+        </button>
+
         <button 
           className="icon-btn" 
           onClick={playVoiceSample}
           title="Play Persona Voice Sample"
           style={{ width: 'auto', padding: '0 12px', gap: 6 }}
         >
-          <Volume2 size={16} color="var(--accent-cyan)" />
+          <Volume2 size={16} color="var(--text-muted)" />
           <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>Voice</span>
         </button>
 

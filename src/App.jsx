@@ -3,11 +3,13 @@ import Sidebar from './components/Sidebar';
 import ChatHeader from './components/ChatHeader';
 import MessageArea from './components/MessageArea';
 import ChatInput from './components/ChatInput';
+import TeacherCoachPanel from './components/TeacherCoachPanel';
 import PersonaInspectorModal from './components/PersonaInspectorModal';
 import DataScienceDashboardModal from './components/DataScienceDashboardModal';
 import ImportModal from './components/ImportModal';
 import ApiKeyModal from './components/ApiKeyModal';
 import GroupChatModal from './components/GroupChatModal';
+import AuthModal from './components/AuthModal';
 
 import { DEFAULT_PERSONAS } from './data/defaultPersonas';
 import { generatePersonaReply } from './services/personaEngine';
@@ -56,12 +58,20 @@ export default function App() {
     return localStorage.getItem('persona_echo_gemini_key') || '';
   });
 
-  // Modal Visibility States
+  // User Authentication State
+  const [currentUser, setCurrentUser] = useState(() => {
+    const saved = localStorage.getItem('persona_echo_auth_user');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  // Modal & Panel Visibility States
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
   const [isDataScienceOpen, setIsDataScienceOpen] = useState(false);
   const [isApiKeyOpen, setIsApiKeyOpen] = useState(false);
   const [isGroupChatOpen, setIsGroupChatOpen] = useState(false);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isTeacherOpen, setIsTeacherOpen] = useState(false);
 
   const [isTyping, setIsTyping] = useState(false);
 
@@ -79,6 +89,12 @@ export default function App() {
 
   const activePersona = personas.find(p => p.id === activePersonaId) || personas.find(p => !p.hidden) || personas[0];
   const activeMessages = chatHistories[activePersonaId] || [];
+
+  // Find the last user message and last bot message for the Teacher box
+  const userMessages = activeMessages.filter(m => m.sender === 'user');
+  const botMessages = activeMessages.filter(m => m.sender === 'bot');
+  const lastUserMsgText = userMessages.length > 0 ? userMessages[userMessages.length - 1].text : '';
+  const lastBotMsgText = botMessages.length > 0 ? botMessages[botMessages.length - 1].text : '';
 
   const lastMessages = {};
   personas.forEach(p => {
@@ -104,7 +120,7 @@ export default function App() {
 
     setIsTyping(true);
 
-    const delayMs = Math.min(2000, Math.max(700, (activePersona.avgWordsPerMsg || 8) * 110));
+    const delayMs = Math.min(1800, Math.max(600, (activePersona.avgWordsPerMsg || 7) * 90));
     await new Promise(r => setTimeout(r, delayMs));
 
     const replyText = await generatePersonaReply({
@@ -122,6 +138,59 @@ export default function App() {
     }));
 
     setIsTyping(false);
+  };
+
+  // Instant Learning / Teacher Mode Handler
+  const handleTeachPersona = ({ trigger, idealResponse, behaviorRule, replaceLast }) => {
+    if (!activePersona) return;
+
+    // 1. Add dialogue pair to persona.chatPairs
+    const newPair = { prompt: trigger, response: idealResponse };
+    const updatedPairs = [newPair, ...(activePersona.chatPairs || [])];
+
+    // 2. Add rule to persona.learnedRules
+    const updatedRules = behaviorRule
+      ? [behaviorRule, ...(activePersona.learnedRules || [])]
+      : (activePersona.learnedRules || []);
+
+    // 3. Update persona in state & storage
+    const updatedPersona = {
+      ...activePersona,
+      chatPairs: updatedPairs,
+      learnedRules: updatedRules
+    };
+
+    setPersonas(prev => prev.map(p => p.id === activePersona.id ? updatedPersona : p));
+
+    // 4. Optionally replace the last bot message in the chat history
+    if (replaceLast) {
+      setChatHistories(prev => {
+        const hist = [...(prev[activePersona.id] || [])];
+        for (let i = hist.length - 1; i >= 0; i--) {
+          if (hist[i].sender === 'bot') {
+            hist[i] = {
+              ...hist[i],
+              text: idealResponse
+            };
+            break;
+          }
+        }
+        return {
+          ...prev,
+          [activePersona.id]: hist
+        };
+      });
+    }
+  };
+
+  const handleLogin = (userData) => {
+    setCurrentUser(userData);
+    localStorage.setItem('persona_echo_auth_user', JSON.stringify(userData));
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('persona_echo_auth_user');
   };
 
   const handleAddPersona = (newPersona) => {
@@ -175,6 +244,8 @@ export default function App() {
         onOpenImport={() => setIsImportOpen(true)}
         onOpenApiKey={() => setIsApiKeyOpen(true)}
         onOpenGroupChat={() => setIsGroupChatOpen(true)}
+        onOpenAuth={() => setIsAuthOpen(true)}
+        currentUser={currentUser}
         lastMessages={lastMessages}
       />
 
@@ -185,13 +256,27 @@ export default function App() {
               persona={activePersona} 
               onOpenInspector={() => setIsInspectorOpen(true)}
               onOpenDataScience={() => setIsDataScienceOpen(true)}
+              onToggleTeacher={() => setIsTeacherOpen(prev => !prev)}
+              isTeacherOpen={isTeacherOpen}
               apiKey={apiKey}
             />
+
             <MessageArea 
               messages={activeMessages} 
               isTyping={isTyping} 
               persona={activePersona}
             />
+
+            {/* Teacher / Live Fine-Tuning Box utilizing the bottom space */}
+            <TeacherCoachPanel 
+              persona={activePersona}
+              lastUserMessage={lastUserMsgText}
+              lastBotMessage={lastBotMsgText}
+              onTeachPersona={handleTeachPersona}
+              isOpen={isTeacherOpen}
+              onToggle={() => setIsTeacherOpen(prev => !prev)}
+            />
+
             <ChatInput 
               onSendMessage={handleSendMessage} 
               persona={activePersona}
@@ -206,6 +291,15 @@ export default function App() {
       </main>
 
       {/* Modals */}
+      {isAuthOpen && (
+        <AuthModal 
+          currentUser={currentUser}
+          onLogin={handleLogin}
+          onLogout={handleLogout}
+          onClose={() => setIsAuthOpen(false)}
+        />
+      )}
+
       {isImportOpen && (
         <ImportModal 
           onAddPersona={handleAddPersona} 
