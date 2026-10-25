@@ -3,6 +3,7 @@ import { Volume2, CheckCheck, Sparkles } from 'lucide-react';
 
 export default function MessageArea({ messages, isTyping, persona }) {
   const containerRef = useRef(null);
+  const bottomRef = useRef(null);
 
   useEffect(() => {
     if (containerRef.current) {

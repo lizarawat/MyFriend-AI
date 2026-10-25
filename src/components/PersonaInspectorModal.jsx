@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import { X, SlidersHorizontal, Brain, Flame, Smile, Save, Sparkles } from 'lucide-react';
 
 export default function PersonaInspectorModal({ persona, onSavePersona, onClose }) {
-  if (!persona) return null;
+  const [traits, setTraits] = useState(() => persona?.traits || { sarcasm: 50, energy: 50, formality: 50, emojiFrequency: 50 });
+  const [customFacts, setCustomFacts] = useState(() => persona?.customFacts || '');
+  const [systemPrompt, setSystemPrompt] = useState(() => persona?.systemPrompt || '');
 
-  const [traits, setTraits] = useState(persona.traits || { sarcasm: 50, energy: 50, formality: 50, emojiFrequency: 50 });
-  const [customFacts, setCustomFacts] = useState(persona.customFacts || '');
-  const [systemPrompt, setSystemPrompt] = useState(persona.systemPrompt || '');
+  if (!persona) return null;
 
   const handleSliderChange = (key, val) => {
     setTraits(prev => ({ ...prev, [key]: parseInt(val) }));

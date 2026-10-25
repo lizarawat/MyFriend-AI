@@ -3,10 +3,10 @@ import { X, BarChart3, Download, Cpu, Sparkles, Database, Check } from 'lucide-r
 import { exportFineTuningDataset, MarkovChainLM } from '../services/dataScienceNLP';
 
 export default function DataScienceDashboardModal({ persona, onClose }) {
-  if (!persona) return null;
-
   const [generatedMarkovText, setGeneratedMarkovText] = useState('');
   const [copiedDataset, setCopiedDataset] = useState(false);
+
+  if (!persona) return null;
 
   const tfidfKeywords = persona.tfidfKeywords || [];
   const chatPairs = persona.chatPairs || [];

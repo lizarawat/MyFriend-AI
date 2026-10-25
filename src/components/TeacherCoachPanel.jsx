@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { GraduationCap, Sparkles, Check, ChevronDown, ChevronUp, Brain, ArrowRight } from 'lucide-react';
+import { GraduationCap, Sparkles, Check, ChevronDown, ChevronUp, Brain } from 'lucide-react';
 
 export default function TeacherCoachPanel({
   persona,
   lastUserMessage,
-  lastBotMessage,
   onTeachPersona,
   isOpen,
   onToggle

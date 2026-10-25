@@ -308,7 +308,6 @@ export default function App() {
             <TeacherCoachPanel 
               persona={activePersona}
               lastUserMessage={lastUserMsgText}
-              lastBotMessage={lastBotMsgText}
               onTeachPersona={handleTeachPersona}
               isOpen={isTeacherOpen}
               onToggle={() => setIsTeacherOpen(prev => !prev)}
