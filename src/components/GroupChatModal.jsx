@@ -25,12 +25,14 @@ export default function GroupChatModal({ personas, apiKey, onClose }) {
       const p = personas[i];
       await new Promise(r => setTimeout(r, 1200));
 
-      const replyText = await generatePersonaReply({
+      const replyResult = await generatePersonaReply({
         persona: p,
         conversationHistory: [],
         userMessage: userText,
         apiKey
       });
+
+      const replyText = Array.isArray(replyResult) ? replyResult.join(' ') : replyResult;
 
       setMessages(prev => [
         ...prev,

@@ -99,7 +99,8 @@ export default function App() {
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isTeacherOpen, setIsTeacherOpen] = useState(false);
 
-  const [isTyping, setIsTyping] = useState(false);
+  const [typingStatus, setTypingStatus] = useState(null); // null | 'thinking' | 'typing'
+  const isTyping = Boolean(typingStatus);
 
   useEffect(() => {
     try {
@@ -144,10 +145,10 @@ export default function App() {
   });
 
   const handleSendMessage = async (userText) => {
-    if (!activePersona) return;
+    if (!activePersona || !userText || !userText.trim()) return;
 
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const userMsg = { sender: 'user', text: userText, timestamp: timeStr };
+    const userMsg = { sender: 'user', text: userText.trim(), timestamp: timeStr };
 
     const updatedHistory = [...activeMessages, userMsg];
     setChatHistories(prev => ({
@@ -155,26 +156,65 @@ export default function App() {
       [activePersonaId]: updatedHistory
     }));
 
-    setIsTyping(true);
+    // Step 1: Human reading & thinking comprehension pause
+    setTypingStatus('thinking');
+    const thinkingDelay = Math.floor(Math.random() * 500) + 1200; // 1.2s to 1.7s
+    await new Promise(r => setTimeout(r, thinkingDelay));
 
-    const delayMs = Math.min(1800, Math.max(600, (activePersona.avgWordsPerMsg || 7) * 90));
-    await new Promise(r => setTimeout(r, delayMs));
+    // Step 2: Generate response bursts (1-3 messages)
+    let replyBursts = [];
+    try {
+      const result = await generatePersonaReply({
+        persona: activePersona,
+        conversationHistory: updatedHistory,
+        userMessage: userText.trim(),
+        apiKey
+      });
+      replyBursts = Array.isArray(result) ? result : [result];
+    } catch (err) {
+      console.error("Error generating reply:", err);
+      replyBursts = ["haa bilkul 🥲"];
+    }
 
-    const replyText = await generatePersonaReply({
-      persona: activePersona,
-      conversationHistory: updatedHistory,
-      userMessage: userText,
-      apiKey
-    });
+    if (!replyBursts || replyBursts.length === 0) {
+      replyBursts = ["haa bilkul 🥲"];
+    }
 
-    const botMsg = { sender: 'bot', text: replyText, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
+    // Step 3: Sequentially deliver each burst with human typing cadence
+    for (let i = 0; i < replyBursts.length; i++) {
+      const burstText = replyBursts[i];
+      if (!burstText || !burstText.trim()) continue;
 
-    setChatHistories(prev => ({
-      ...prev,
-      [activePersonaId]: [...prev[activePersonaId], botMsg]
-    }));
+      setTypingStatus('typing');
 
-    setIsTyping(false);
+      // Typing duration proportional to length of the burst
+      const wordCount = burstText.trim().split(/\s+/).length;
+      const burstTypingDelay = Math.min(1500, Math.max(700, wordCount * 90));
+      await new Promise(r => setTimeout(r, burstTypingDelay));
+
+      const botTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const botMsg = {
+        sender: 'bot',
+        text: burstText.trim(),
+        timestamp: botTimeStr
+      };
+
+      setChatHistories(prev => {
+        const currentHist = prev[activePersonaId] || [];
+        return {
+          ...prev,
+          [activePersonaId]: [...currentHist, botMsg]
+        };
+      });
+
+      // Natural pause between sequential bubbles (400ms - 550ms)
+      if (i < replyBursts.length - 1) {
+        setTypingStatus(null);
+        await new Promise(r => setTimeout(r, 450));
+      }
+    }
+
+    setTypingStatus(null);
   };
 
   // Instant Learning / Teacher Mode Handler
@@ -296,11 +336,13 @@ export default function App() {
               onToggleTeacher={() => setIsTeacherOpen(prev => !prev)}
               isTeacherOpen={isTeacherOpen}
               apiKey={apiKey}
+              typingStatus={typingStatus}
             />
 
             <MessageArea 
               messages={activeMessages} 
               isTyping={isTyping} 
+              typingStatus={typingStatus}
               persona={activePersona}
             />
 

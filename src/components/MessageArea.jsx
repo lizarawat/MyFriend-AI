@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Volume2, CheckCheck, Sparkles } from 'lucide-react';
 
-export default function MessageArea({ messages, isTyping, persona }) {
+export default function MessageArea({ messages, isTyping, typingStatus, persona }) {
   const containerRef = useRef(null);
   const bottomRef = useRef(null);
 
@@ -12,7 +12,7 @@ export default function MessageArea({ messages, isTyping, persona }) {
         behavior: 'smooth'
       });
     }
-  }, [messages, isTyping]);
+  }, [messages, isTyping, typingStatus]);
 
   const playTTS = (text) => {
     if (!('speechSynthesis' in window)) return;
@@ -74,7 +74,19 @@ export default function MessageArea({ messages, isTyping, persona }) {
         );
       })}
 
-      {isTyping && (
+      {typingStatus === 'thinking' && (
+        <div className="message-wrapper bot">
+          <span className="sender-name-label">{persona?.name || 'Virtual Friend'} is reading & thinking...</span>
+          <div className="thinking-indicator">
+            <Sparkles size={14} className="pulse-sparkle" color="var(--accent-cyan)" />
+            <span style={{ fontSize: '0.8rem', color: 'var(--accent-cyan)', fontWeight: 500 }}>
+              Analyzing message & mood...
+            </span>
+          </div>
+        </div>
+      )}
+
+      {typingStatus === 'typing' && (
         <div className="message-wrapper bot">
           <span className="sender-name-label">{persona?.name || 'Virtual Friend'} is typing...</span>
           <div className="typing-indicator">

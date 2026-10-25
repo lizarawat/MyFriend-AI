@@ -7,7 +7,8 @@ export default function ChatHeader({
   onOpenDataScience, 
   onToggleTeacher,
   isTeacherOpen,
-  apiKey 
+  apiKey,
+  typingStatus
 }) {
   if (!persona) return null;
 
@@ -39,14 +40,42 @@ export default function ChatHeader({
         <div>
           <div className="chat-header-name">{persona.name}</div>
           <div className="chat-header-status">
-            <span style={{
-              width: 7,
-              height: 7,
-              borderRadius: '50%',
-              background: 'var(--accent-emerald)',
-              display: 'inline-block'
-            }}></span>
-            {hasApiKey ? 'Gemini 1.5 LLM Engine Active' : 'TF-IDF & Anti-Repetition NLP Active'}
+            {typingStatus === 'thinking' ? (
+              <>
+                <span style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: '50%',
+                  background: 'var(--accent-cyan)',
+                  display: 'inline-block',
+                  boxShadow: '0 0 8px var(--accent-cyan)'
+                }}></span>
+                <span style={{ color: 'var(--accent-cyan)', fontWeight: 600 }}>Reading & thinking...</span>
+              </>
+            ) : typingStatus === 'typing' ? (
+              <>
+                <span style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: '50%',
+                  background: 'var(--accent-emerald)',
+                  display: 'inline-block',
+                  boxShadow: '0 0 8px var(--accent-emerald)'
+                }}></span>
+                <span style={{ color: 'var(--accent-emerald)', fontWeight: 600 }}>Typing a message...</span>
+              </>
+            ) : (
+              <>
+                <span style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: '50%',
+                  background: 'var(--accent-emerald)',
+                  display: 'inline-block'
+                }}></span>
+                <span>{hasApiKey ? 'Gemini 1.5 LLM Engine Active' : 'Semantic NLP & Multi-Burst Active'}</span>
+              </>
+            )}
           </div>
         </div>
       </div>
