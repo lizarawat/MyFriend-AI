@@ -18,33 +18,39 @@ export default function Sidebar({
   const [showHidden, setShowHidden] = useState(false);
   const [filterType, setFilterType] = useState('all'); // 'all' | 'hinglish' | 'english'
 
-  const hiddenCount = personas.filter(p => p.hidden).length;
+  const hiddenCount = (personas || []).filter(p => p && p.hidden).length;
 
-  const filteredPersonas = personas.filter(p => {
+  const filteredPersonas = (personas || []).filter(p => {
+    if (!p) return false;
     if (!showHidden && p.hidden) return false;
 
+    const nameStr = (p.name || '').toLowerCase();
+    const langStr = (p.detectedLanguage || '').toLowerCase();
+    const archStr = (p.archetype || '').toLowerCase();
+
     if (filterType === 'hinglish') {
-      const isH = p.name.toLowerCase().includes('bunty') || (p.detectedLanguage && p.detectedLanguage.toLowerCase().includes('hinglish'));
+      const isH = nameStr.includes('bunty') || langStr.includes('hinglish');
       if (!isH) return false;
     } else if (filterType === 'english') {
-      const isH = p.name.toLowerCase().includes('bunty') || (p.detectedLanguage && p.detectedLanguage.toLowerCase().includes('hinglish'));
+      const isH = nameStr.includes('bunty') || langStr.includes('hinglish');
       if (isH) return false;
     }
 
-    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (p.archetype && p.archetype.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchesSearch = nameStr.includes(searchTerm.toLowerCase()) || archStr.includes(searchTerm.toLowerCase());
     return matchesSearch;
   });
 
   const handleDelete = (e, persona) => {
     e.stopPropagation();
-    if (window.confirm(`Are you sure you want to delete ${persona.name}? This will remove all learned chat data.`)) {
+    if (!persona) return;
+    if (window.confirm(`Are you sure you want to delete ${persona.name || 'this contact'}? This will remove all learned chat data.`)) {
       onDeletePersona(persona.id);
     }
   };
 
   const handleHideToggle = (e, persona) => {
     e.stopPropagation();
+    if (!persona) return;
     onToggleHidePersona(persona.id);
   };
 
@@ -76,7 +82,7 @@ export default function Sidebar({
           {currentUser ? (
             <button className="user-account-badge" onClick={onOpenAuth} title="Account & 2FA Status">
               <ShieldCheck size={13} />
-              <span>{currentUser.name.split(' ')[0]} (2FA)</span>
+              <span>{((currentUser && currentUser.name) || (currentUser && currentUser.email) || 'User').split(' ')[0]} (2FA)</span>
             </button>
           ) : (
             <button 

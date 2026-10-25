@@ -16,27 +16,45 @@ import { generatePersonaReply } from './services/personaEngine';
 
 export default function App() {
   const [personas, setPersonas] = useState(() => {
-    const saved = localStorage.getItem('persona_echo_personas');
-    let list = saved ? JSON.parse(saved) : DEFAULT_PERSONAS;
-    
-    // Deduplicate contacts by persona name to eliminate duplicate entries
-    const uniqueMap = new Map();
-    list.forEach(p => {
-      const key = (p.name || '').toLowerCase().trim();
-      if (key && !uniqueMap.has(key)) {
-        uniqueMap.set(key, p);
+    try {
+      const saved = localStorage.getItem('persona_echo_personas');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const uniqueMap = new Map();
+          parsed.forEach(p => {
+            if (p && typeof p === 'object') {
+              const key = (p.name || p.id || '').toLowerCase().trim();
+              if (key && !uniqueMap.has(key)) {
+                uniqueMap.set(key, p);
+              }
+            }
+          });
+          if (uniqueMap.size > 0) return Array.from(uniqueMap.values());
+        }
       }
-    });
-    return uniqueMap.size > 0 ? Array.from(uniqueMap.values()) : DEFAULT_PERSONAS;
+    } catch (e) {
+      console.warn("Using default personas due to cache error:", e);
+    }
+    return DEFAULT_PERSONAS;
   });
 
   const [activePersonaId, setActivePersonaId] = useState(() => {
-    return personas[0]?.id || 'bunty-hinglish';
+    return 'bunty-hinglish';
   });
 
   const [chatHistories, setChatHistories] = useState(() => {
-    const saved = localStorage.getItem('persona_echo_histories');
-    if (saved) return JSON.parse(saved);
+    try {
+      const saved = localStorage.getItem('persona_echo_histories');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn("Using default histories due to cache error:", e);
+    }
     
     return {
       'bunty-hinglish': [
@@ -55,13 +73,21 @@ export default function App() {
   });
 
   const [apiKey, setApiKey] = useState(() => {
-    return localStorage.getItem('persona_echo_gemini_key') || '';
+    try {
+      return localStorage.getItem('persona_echo_gemini_key') || '';
+    } catch (e) {
+      return '';
+    }
   });
 
   // User Authentication State
   const [currentUser, setCurrentUser] = useState(() => {
-    const saved = localStorage.getItem('persona_echo_auth_user');
-    return saved ? JSON.parse(saved) : null;
+    try {
+      const saved = localStorage.getItem('persona_echo_auth_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      return null;
+    }
   });
 
   // Modal & Panel Visibility States
@@ -76,33 +102,44 @@ export default function App() {
   const [isTyping, setIsTyping] = useState(false);
 
   useEffect(() => {
-    localStorage.setItem('persona_echo_personas', JSON.stringify(personas));
+    try {
+      localStorage.setItem('persona_echo_personas', JSON.stringify(personas));
+    } catch (e) {}
   }, [personas]);
 
   useEffect(() => {
-    localStorage.setItem('persona_echo_histories', JSON.stringify(chatHistories));
+    try {
+      localStorage.setItem('persona_echo_histories', JSON.stringify(chatHistories));
+    } catch (e) {}
   }, [chatHistories]);
 
   useEffect(() => {
-    localStorage.setItem('persona_echo_gemini_key', apiKey);
+    try {
+      localStorage.setItem('persona_echo_gemini_key', apiKey);
+    } catch (e) {}
   }, [apiKey]);
 
-  const activePersona = personas.find(p => p.id === activePersonaId) || personas.find(p => !p.hidden) || personas[0];
-  const activeMessages = chatHistories[activePersonaId] || [];
+  const validPersonas = Array.isArray(personas) && personas.length > 0 ? personas : DEFAULT_PERSONAS;
+  const activePersona = validPersonas.find(p => p && p.id === activePersonaId) || 
+                        validPersonas.find(p => p && !p.hidden) || 
+                        validPersonas[0];
+  const activeMessages = (chatHistories && Array.isArray(chatHistories[activePersonaId])) ? chatHistories[activePersonaId] : [];
 
   // Find the last user message and last bot message for the Teacher box
-  const userMessages = activeMessages.filter(m => m.sender === 'user');
-  const botMessages = activeMessages.filter(m => m.sender === 'bot');
-  const lastUserMsgText = userMessages.length > 0 ? userMessages[userMessages.length - 1].text : '';
-  const lastBotMsgText = botMessages.length > 0 ? botMessages[botMessages.length - 1].text : '';
+  const userMessages = activeMessages.filter(m => m && m.sender === 'user');
+  const botMessages = activeMessages.filter(m => m && m.sender === 'bot');
+  const lastUserMsgText = userMessages.length > 0 ? (userMessages[userMessages.length - 1]?.text || '') : '';
+  const lastBotMsgText = botMessages.length > 0 ? (botMessages[botMessages.length - 1]?.text || '') : '';
 
   const lastMessages = {};
-  personas.forEach(p => {
-    const hist = chatHistories[p.id];
-    if (hist && hist.length > 0) {
-      lastMessages[p.id] = hist[hist.length - 1].text;
+  validPersonas.forEach(p => {
+    if (!p || !p.id) return;
+    const hist = chatHistories ? chatHistories[p.id] : null;
+    if (Array.isArray(hist) && hist.length > 0) {
+      const last = hist[hist.length - 1];
+      lastMessages[p.id] = (last && typeof last === 'object' && last.text) ? last.text : (typeof last === 'string' ? last : 'Tap to chat...');
     } else {
-      lastMessages[p.id] = p.sampleMessages?.[0] || 'Tap to chat...';
+      lastMessages[p.id] = (p.sampleMessages && p.sampleMessages[0]) || 'Tap to chat...';
     }
   });
 
